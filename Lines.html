@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Live NFL Betting Lines</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+
+  <header class="text-right text-sm py-6 text-gray-500 bg-white border-b">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+      <h1 class="absolute top-0 left-0 size-20"><img src="Images/Parlay_Friends_Logo_Vectorized.svg" alt="Parlay Friends Logo"></h1>
+      <nav class="absolute top-6 right-20 size-50 flex space-x-4">
+        <a href="index.html" class="text-gray-700 hover:text-green-600">Home</a>
+        <a href="sign_up.html" class="text-gray-700 hover:text-green-600">Sign Up</a>
+        <a href="Leagues.html" class="text-gray-700 hover:text-green-600">Leagues</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto py-10 px-4">
+    <h2 class="text-3xl font-bold mb-6 text-center text-gray-800">Live NFL Betting Lines</h2>
+    <div id="odds-container" class="space-y-6">
+      <!-- Live odds will be injected here -->
+    </div>
+  </main>
+
+  <footer class="text-center text-sm py-6 text-gray-500 bg-white mt-10 border-t">
+    &copy; 2023 Parlay Friends. All rights reserved.
+  </footer>
+
+  <script>
+    const apiKey = '339cd4024b85711c69e91d9c2e20bfdf'; // Replace with your actual API key
+    const sportKey = 'americanfootball_nfl';
+    const region = 'us'; // Regions: us, uk, eu, au
+    const market = 'futures'; // Markets: h2h (moneyline), spreads, totals
+
+    async function fetchOdds() {
+      try {
+        const response = await fetch(`https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?apiKey=${apiKey}&regions=${region}&markets=${market}`);
+        const data = await response.json();
+
+        const container = document.getElementById('odds-container');
+        container.innerHTML = ''; // Clear previous data
+
+        data.forEach(game => {
+          const homeTeam = game.home_team;
+          const awayTeam = game.away_team;
+          const commenceTime = new Date(game.commence_time).toLocaleString();
+
+          const bookmakers = game.bookmakers;
+          if (bookmakers.length > 0) {
+            const bookmaker = bookmakers[0]; // Using the first bookmaker
+            const markets = bookmaker.markets;
+            const h2h = markets.find(m => m.key === 'h2h');
+
+            if (h2h) {
+              const outcomes = h2h.outcomes;
+              const homeOdds = outcomes.find(o => o.name === homeTeam)?.price || 'N/A';
+              const awayOdds = outcomes.find(o => o.name === awayTeam)?.price || 'N/A';
+
+              const gameDiv = document.createElement('div');
+              gameDiv.className = 'bg-white rounded-xl p-6 shadow-md';
+
+              gameDiv.innerHTML = `
+                <div class="flex justify-between items-center mb-2">
+                  <h3 class="text-xl font-semibold">${awayTeam} @ ${homeTeam}</h3>
+                  <span class="text-sm text-gray-500">${commenceTime}</span>
+                </div>
+                <div class="grid grid-cols-2 text-center text-sm text-gray-700">
+                  <div>
+                    <p class="font-medium">${awayTeam}</p>
+                    <p>Moneyline: ${awayOdds}</p>
+                  </div>
+                  <div>
+                    <p class="font-medium">${homeTeam}</p>
+                    <p>Moneyline: ${homeOdds}</p>
+                  </div>
+                </div>
+              `;
+
+              container.appendChild(gameDiv);
+            }
+          }
+        });
+      } catch (error) {
+        console.error('Error fetching odds:', error);
+      }
+    }
+
+    // Initial fetch
+    fetchOdds();
+
+    // Refresh every 60 seconds
+    setInterval(fetchOdds, 60000);
+  </script>
+
+</body>
+</html>
