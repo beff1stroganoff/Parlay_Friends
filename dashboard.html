@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Parlay Friends - Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="dashboard.js" defer></script>
+</head>
+<body>
+  <header>
+    <img src="Images/Parlay_Friends_Logo_Vectorized.svg" alt="Parlay Friends Logo" class="logo">
+    <button id="logoutBtn">Logout</button>
+    <nav>
+      <a href="index.html" class="button">Home</a>
+      <a href="lines.html" class="button">Lines</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Welcome, <span id="username">Friend</span>!</h1>
+
+    <section id="live-lines">
+      <h2>Live Betting Lines</h2>
+      <div id="linesContainer">
+        <!-- Betting lines will populate here -->
+      </div>
+    </section>
+
+    <section id="your-leagues">
+      <h2>Your Leagues</h2>
+      <ul id="leagueList"></ul>
+      <button onclick="window.location.href='start_league.html'">Start a League</button>
+      <button onclick="window.location.href='join_league.html'">Join a League</button>
+    </section>
+
+
+
+    <div id="odds-container"></div>
+  </main>
+</body>
+</html>
+∏

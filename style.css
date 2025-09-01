@@ -1,96 +1,262 @@
-.container {
-    margin-left: auto;
-    margin-right: auto; 
-    width: 1024px;
-}
-html {
+/* === Global Layout === */
+html, body {
     height: 100%;
-}
-body {
-    background-image: radial-gradient(circle, rgb(0, 0, 0) 0%, rgb(119, 119, 119) 100%);
-   
-}
-.logo {
-    width: 11%;
-    height: auto;
-    color: green
-    ;
-}
-
-img {
-    width: 11%;
-    height: auto;
-}
-
-.video { 
-    padding-top: 100px; 
-    padding-bottom: 20px;
-    text-align: center;                      
-}
-
-header {
-    height: 118px;
-    text-align: left;
+    margin: 0;
+    padding: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    background: radial-gradient(circle, #000000 0%, #777777 100%);
+    color: #ffffff;
+  }
   
- 
-   
+  .container {
+    max-width: 1024px;
+    margin: 0 auto;
+    padding: 0 1rem;
+  }
   
-}
-nav {
-    background-color: rgba(100, 243, 107, 0.539);
-    text-align: center;
-    padding-top: 20px;
-    padding-bottom: 20px;
-}
-main {
-        height: 500px;
-        text-align: center;
-        padding-top: 80px;
-        padding-left: 240px;
-        padding-right: 240px;
-}
-footer {
-    background-color:rgba(25, 15, 224, 0.51);
-    text-align: center;
+  /* === Header === */
+  header {
     height: 100px;
-    margin-top: 50px;
-    padding-top: 20px;
-    padding-bottom: 20px;
-}
-
-h1 {
+    background-color: rgba(25, 15, 224, 0.51);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.5rem;
+  }
+  
+  header img.logo {
+    width: 100px;
+    height: auto;
+  }
+  
+  header button {
+    background-color: #ff4444;
     color: white;
-    font-size: 4rem;
-    font-family: Arial, Helvetica, sans-serif;
-}
-p {
-    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  
+  header button:hover {
+    background-color: #cc0000;
+  }
+  
+  /* === Navigation === */
+  nav {
+    padding: 1rem;
     text-align: center;
-    font-size: 1.1rem;
-    font-family: Arial, Helvetica, sans-serif;
-    line-height: 2rem;
-}
-a {
-    height: 3rem;
-    width: 6rem;
-    color: white;
-    font-size: 40px;
-    font-family: Arial, Helvetica, sans-serif;
-}
-nav a {
-    color: white;
+   
+  }
+  
+  nav a {
+    padding: 0.5rem 1rem;
+    background-color: #1e90ff;
+    border-radius: 8px;
     text-decoration: none;
-    font-size: 18px;
-    font-family: Arial, Helvetica, sans-serif;
-    padding-left: 50px;
-    padding-right: 50px;
-
-}
-.maps {
+    color: white;
+    margin: 0 0.5rem;
+  }
+  nav a:hover {
+    background-color: #0074cc;
+  }
+  
+  
+  /* === Main Content === */
+  main {
+    padding: 2rem;
+    text-align: center;
+  }
+  
+  h1, h2, h3 {
+    color: white;
+  }
+  
+  h1 {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+  }
+  
+  h2 {
+    font-size: 2rem;
+    margin: 1.5rem 0;
+  }
+  
+  h3 {
+    font-size: 1.2rem;
+    margin: 1rem 0 0.5rem;
+  }
+  
+  /* === Paragraph & Text === */
+  p {
+    font-size: 1.1rem;
+    line-height: 1.6;
+    color: white;
+  }
+  
+  a {
+    color: white;
+    font-size: 1.2rem;
+  }
+  
+  /* === Forms === */
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-width: 500px;
+    margin: 0 auto;
+  }
+  
+  input, textarea, select {
+    padding: 0.75rem;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 1rem;
     width: 100%;
-    height: 400px;      
-    padding-left:  200px;
-    padding-right: 200px;
-    padding-top: 20px;              
-    padding-bottom: 20px;
-}
+  }
+  label {
+    margin-bottom: 0.3rem;
+    display: block;
+  }
+  
+  
+  button {
+    background-color: #1e90ff;
+    color: white;
+    border: none;
+    padding: 0.75rem;
+    font-size: 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+  
+  button:hover {
+    background-color: #0074cc;
+  }
+  
+  /* === Betting Lines === */
+  #lineContainer, .line-item {
+    margin: 1rem auto;
+    background-color: #1c1c1c;
+    padding: 1rem;
+    border-radius: 8px;
+    max-width: 600px;
+    box-shadow: 0 2px 6px rgba(255, 255, 255, 0.1);
+  }
+  
+  /* === Lists === */
+  ul {
+    list-style-type: none;
+    padding: 0;
+
+  }
+  
+  ul li {
+    margin: 0.5rem 0;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+   
+  }
+  
+  /* === Footer === */
+  footer {
+    background-color: rgba(25, 15, 224, 0.51);
+    text-align: center;
+    padding: 1rem;
+    margin-top: 2rem;
+    font-size: 0.9rem;
+    color: white;
+  }
+  
+  /* === Utility Classes === */
+  .center {
+    text-align: center;
+  }
+  
+  .mt-2 { margin-top: 0.5rem; }
+  .mt-4 { margin-top: 1rem; }
+  .mt-6 { margin-top: 1.5rem; }
+  
+  .mb-2 { margin-bottom: 0.5rem; }
+  .mb-4 { margin-bottom: 1rem; }
+  .mb-6 { margin-bottom: 1.5rem; }
+  
+  .rounded {
+    border-radius: 8px;
+  }
+  
+
+  .selectable {
+    cursor: pointer;
+    background-color: #222;
+    padding: 0.5rem;
+    margin: 0.5rem 0;
+    border-radius: 6px;
+  }
+  
+  .selectable:hover {
+    background-color: #444;
+  }
+  .hidden {
+    display: none !important; 
+  }
+  .parlay-popup {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 280px;
+    background: #fff;
+    border: 2px solid #4CAF50;
+    border-radius: 8px;
+    padding: 1em;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+    font-family: sans-serif;
+    z-index: 1000;
+  }
+  
+  .parlay-popup h3 {
+    margin: 0 0 0.5em 0;
+    font-size: 1.1em;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 0.3em;
+  }
+  
+  #parlay-picks {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 0.5em 0;
+  }
+  
+  #parlay-picks li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9em;
+    margin-bottom: 6px;
+  }
+  
+  .btn-submit, .btn-clear {
+    width: 100%;
+    margin-top: 6px;
+    padding: 6px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  .btn-submit {
+    background-color: #4CAF50;
+    color: white;
+    font-weight: bold;
+  }
+  
+  .btn-clear {
+    background-color: #f44336;
+    color: white;
+  }
+  .btn-submit:hover, .btn-clear:hover {
+    opacity: 0.9;
+  }  

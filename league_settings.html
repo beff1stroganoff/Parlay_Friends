@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>League Settings | Parlay Friends</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <img src="Images/Parlay_Friends_Logo_Vectorized.svg" class="logo" alt="Parlay Friends Logo">
+    <nav>
+      <a href="dashboard.html" class="button">Back to Dashboard</a>
+    </nav>
+  </header>
+
+  <main>
+    <h2>League Settings</h2>
+
+    <form id="league-settings-form">
+      <div class="line-item">
+        <label for="league-type">League Type:</label>
+        <select id="league-type" name="leagueType" required>
+          <option value="">Select League Type</option>
+          <option value="classic">Classic (Bucs Based)</option>
+          <option value="points">Points Per Week</option>
+        </select>
+      </div>
+
+      <div id="classic-settings" class="line-item hidden">
+        <label for="starting-bucs">Starting Bucs (per member):</label>
+        <input type="number" id="starting-bucs" name="startingBucs" min="0">
+      </div>
+
+      <div id="points-settings" class="line-item hidden">
+        <label for="points-per-win">Points Per Win:</label>
+        <input type="number" id="points-per-win" name="pointsPerWin" min="0">
+
+        <label for="bonus-week">Bonus for Longest Odds (Weekly):</label>
+        <input type="number" id="bonus-week" name="bonusWeek" min="0">
+
+        <label for="bonus-season">Bonus for Longest Odds (Season):</label>
+        <input type="number" id="bonus-season" name="bonusSeason" min="0">
+      </div>
+
+      <div class="line-item">
+        <label for="min-total-odds">Minimum Total Odds (+500, +600, etc.):</label>
+        <input type="number" id="min-total-odds" name="minTotalOdds" required>
+
+        <label for="min-leg-odds">Minimum Odds Per Leg (-200, -150, etc.):</label>
+        <input type="number" id="min-leg-odds" name="minLegOdds" required>
+
+        <label for="num-legs">Number of Legs Required:</label>
+        <input type="number" id="num-legs" name="numLegs" min="1" required>
+
+        <label for="submission-deadline">Submission Deadline (Day/Time):</label>
+        <input type="text" id="submission-deadline" name="submissionDeadline" placeholder="e.g., Sunday 12:00 PM" required>
+      </div>
+
+      <div class="center mt-4">
+        <button type="submit">Save Settings</button>
+        <button type="button" id="cancel-settings">Cancel</button>
+      </div>
+    </form>
+  </main>
+
+  <footer>
+    <p>&copy; 2025 Parlay Friends. All rights reserved.</p>
+  </footer>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const form = document.getElementById('league-settings-form');
+      const leagueType = document.getElementById('league-type');
+      const classicSettings = document.getElementById('classic-settings');
+      const pointsSettings = document.getElementById('points-settings');
+      const leagueId = new URLSearchParams(window.location.search).get('leagueId') || localStorage.getItem('leagueId');
+
+      // Show/hide sections on dropdown change
+      leagueType.addEventListener('change', () => {
+        classicSettings.classList.add('hidden');
+        pointsSettings.classList.add('hidden');
+        if (leagueType.value === 'classic') classicSettings.classList.remove('hidden');
+        if (leagueType.value === 'points') pointsSettings.classList.remove('hidden');
+      });
+
+      // Cancel button
+      document.getElementById('cancel-settings').addEventListener('click', () => {
+        window.location.href = `league_home.html?leagueId=${leagueId}`;
+      });
+
+      // Load existing league settings
+      try {
+        const res = await fetch(`/league/${leagueId}`, {
+          headers: {
+            'Authorization': 'Bearer ' + localStorage.getItem('token')
+          }
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          const s = data.settings;
+          leagueType.value = s.leagueType;
+          leagueType.dispatchEvent(new Event('change')); // trigger visibility
+
+          if (s.leagueType === 'classic') {
+            document.getElementById('starting-bucs').value = s.startingBucs ?? '';
+          } else if (s.leagueType === 'points') {
+            document.getElementById('points-per-win').value = s.pointsPerWin ?? '';
+            document.getElementById('bonus-week').value = s.bonusWeek ?? '';
+            document.getElementById('bonus-season').value = s.bonusSeason ?? '';
+          }
+
+          document.getElementById('min-total-odds').value = s.minTotalOdds ?? '';
+          document.getElementById('min-leg-odds').value = s.minLegOdds ?? '';
+          document.getElementById('num-legs').value = s.numLegs ?? '';
+          document.getElementById('submission-deadline').value = s.submissionDeadline ?? '';
+        } else {
+          alert('Failed to load league settings.');
+        }
+      } catch (err) {
+        console.error('Error loading settings:', err);
+        alert('Unable to load league data.');
+      }
+
+      // Submit handler
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const type = leagueType.value;
+
+        const payload = {
+          leagueId,
+          leagueType: type,
+          minTotalOdds: parseInt(document.getElementById('min-total-odds').value),
+          minLegOdds: parseInt(document.getElementById('min-leg-odds').value),
+          numLegs: parseInt(document.getElementById('num-legs').value),
+          submissionDeadline: document.getElementById('submission-deadline').value.trim()
+        };
+
+        if (type === 'classic') {
+          payload.startingBucs = parseInt(document.getElementById('starting-bucs').value);
+        } else if (type === 'points') {
+          payload.pointsPerWin = parseInt(document.getElementById('points-per-win').value);
+          payload.bonusWeek = parseInt(document.getElementById('bonus-week').value);
+          payload.bonusSeason = parseInt(document.getElementById('bonus-season').value);
+        }
+
+        try {
+          const res = await fetch('/api/league-settings', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + localStorage.getItem('token')
+            },
+            body: JSON.stringify(payload)
+          });
+
+          const result = await res.json();
+
+          if (res.ok) {
+            alert('League settings saved!');
+            window.location.href = `league_home.html?leagueId=${leagueId}`;
+          } else {
+            alert('Error: ' + (result.error || 'Could not save settings'));
+          }
+        } catch (err) {
+          console.error('Server error:', err);
+          alert('Server error — please try again.');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

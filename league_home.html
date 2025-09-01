@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>League Home | Parlay Friends</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <img src="Images/Parlay_Friends_Logo_Vectorized.svg" class="logo" alt="Parlay Friends Logo">
+    <nav>
+      <a href="dashboard.html" class="button">Back to Dashboard</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>🏈 Welcome to <span id="leagueName">Your League</span>!</h1>
+
+    <section class="line-item">
+      <h2>League Details</h2>
+      <div id="leagueDetails"></div>
+
+      <div class="center mt-4">
+        <button onclick="goToLinesPage()">Make Picks for This Week</button>
+      </div>
+      
+
+      <div class="center mt-4">
+        <button id="edit-settings">Edit League Settings</button>
+      </div>
+    </section>
+
+    <section class="line-item">
+      <h3>Standings</h3>
+      <label for="week-selector">Week #:</label>
+      <input type="number" id="week-selector" min="1" value="1" />
+      <button id="load-week">Load Week</button>
+
+      <div id="standings-results" class="mt-4"></div>
+    </section>
+    <div id="season-stats" class="mt-4"></div>
+
+  </main>
+
+  <footer>
+    <p>&copy; 2025 Parlay Friends. All rights reserved.</p>
+  </footer>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const leagueId = params.get('leagueId');
+
+    if (!leagueId) {
+      alert('No league ID found! Redirecting to dashboard...');
+      window.location.href = 'dashboard.html';
+    }
+
+    document.getElementById('edit-settings').addEventListener('click', () => {
+      window.location.href = `league_settings.html?leagueId=${leagueId}`;
+    });
+
+    async function loadLeague() {
+      try {
+        const response = await fetch(`/league/${leagueId}`, {
+          headers: {
+            'Authorization': 'Bearer ' + localStorage.getItem('token')
+          }
+        });
+
+        const league = await response.json();
+
+        if (response.ok) {
+          document.getElementById('leagueName').textContent = league.name;
+          document.getElementById('leagueDetails').innerHTML = `
+            <strong>League Type:</strong> ${league.settings.leagueType}<br>
+            <strong>Minimum Total Odds:</strong> +${league.settings.minTotalOdds}<br>
+            <strong>Minimum Leg Odds:</strong> ${league.settings.minLegOdds}<br>
+            <strong>Number of Legs:</strong> ${league.settings.numLegs}<br>
+            <strong>Submission Deadline:</strong> ${league.settings.submissionDeadline}
+          `;
+        } else {
+          document.getElementById('leagueDetails').textContent = league.error || 'Failed to load league details.';
+        }
+      } catch (err) {
+        console.error('Error loading league:', err);
+        document.getElementById('leagueDetails').textContent = 'Server error loading league details.';
+      }
+    }
+
+    async function loadWeekPicks() {
+  const week = document.getElementById('weekInput').value;
+  const container = document.getElementById('weekPicks');
+
+  try {
+    const res = await fetch(`/api/parlay/week/${leagueId}/${week}`, {
+      headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+    });
+
+    const data = await res.json();
+
+    // NEW RENDERING CODE HERE
+    if (!Array.isArray(data) || data.length === 0) {
+      container.innerHTML = '<p class="center">No parlays submitted for this week.</p>';
+      return;
+    }
+
+    const byUser = {};
+    data.forEach(p => {
+      const user = p.userId.username;
+      byUser[user] = byUser[user] || [];
+      byUser[user].push(p);
+    });
+
+    container.innerHTML = '';
+    for (const [user, tickets] of Object.entries(byUser)) {
+      const userDiv = document.createElement('div');
+      userDiv.className = 'line-item';
+      userDiv.innerHTML = `<strong>${user}</strong><br>`;
+
+      tickets.forEach(ticket => {
+        // list legs
+        ticket.picks.forEach(leg => {
+          userDiv.innerHTML += `• ${leg.team} (${leg.type.toUpperCase()}) @ ${leg.odds > 0 ? '+'+leg.odds : leg.odds}<br>`;
+        });
+        // show total (decimal)
+        userDiv.innerHTML += `<em>Total Odds: ${ticket.odds.toFixed(2)}</em><hr>`;
+      });
+
+      container.appendChild(userDiv);
+    }
+
+  } catch (err) {
+    console.error('Error loading week picks:', err);
+    container.innerHTML = '<p class="center">Error loading picks.</p>';
+  }
+}
+
+
+    // Load league on page load
+    loadLeague();
+
+    // Wire up standings fetch
+    document.getElementById('load-week').addEventListener('click', loadWeekPicks);
+  </script>
+
+<script>
+  async function loadWeekPicks() {
+    const week = parseInt(document.getElementById('week-selector').value);
+    const container = document.getElementById('standings-results');
+
+    if (!leagueId || !week) {
+      alert('Missing league ID or week.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/parlay/week/${leagueId}/${week}`, {
+        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+      });
+      const data = await res.json();
+
+      if (!Array.isArray(data) || data.length === 0) {
+        container.innerHTML = '<p class="center">No parlays submitted for this week.</p>';
+        return;
+      }
+
+      // data = array of parlay docs (one per user)
+      container.innerHTML = '';
+      data.forEach(parlay => {
+        const userDiv = document.createElement('div');
+        userDiv.className = 'line-item';
+        userDiv.innerHTML = `<strong>${parlay.userId.username}</strong><br>`;
+
+        parlay.picks.forEach(pick => {
+          userDiv.innerHTML += `• ${pick.team} (${pick.type.toUpperCase()}) @ ${pick.odds > 0 ? '+' + pick.odds : pick.odds}<br>`;
+        });
+
+        userDiv.innerHTML += `<em>Total Odds: ${Number(parlay.odds).toFixed(2)}</em><hr>`;
+        container.appendChild(userDiv);
+      });
+    } catch (err) {
+      console.error('Failed to fetch standings:', err);
+      container.innerHTML = '<p class="center">Error loading picks.</p>';
+    }
+  }
+</script>
+<script>
+  async function loadSeasonStats() {
+    const params = new URLSearchParams(window.location.search);
+    const leagueId = params.get('leagueId') || localStorage.getItem('leagueId');
+    const token = localStorage.getItem('token');
+    if (!leagueId) return;
+  
+    const container = document.getElementById('season-stats');
+    try {
+      const res = await fetch(`/api/league/${leagueId}/stats`, {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      const data = await res.json();
+  
+      if (!Array.isArray(data) || data.length === 0) {
+        container.innerHTML = '<p class="center">No stats yet.</p>';
+        return;
+      }
+  
+      // Build a small table
+      const rows = data.map(s =>
+        `<tr>
+          <td>${s.username}</td>
+          <td class="center">${s.legsWon}</td>
+          <td class="center">${s.legsLost}</td>
+          <td class="center">${s.parlayWins}</td>
+          <td class="center">${s.parlayLosses}</td>
+          <td class="center"><strong>${s.points}</strong></td>
+        </tr>`
+      ).join('');
+  
+      container.innerHTML = `
+        <h3>Season Stats</h3>
+        <div class="line-item">
+          <table style="width:100%; border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th style="text-align:left;">Member</th>
+                <th>Legs Won</th>
+                <th>Legs Lost</th>
+                <th>Parlay Wins</th>
+                <th>Parlay Losses</th>
+                <th>Points</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    } catch (err) {
+      console.error('Stats load error:', err);
+      container.innerHTML = '<p class="center">Error loading stats.</p>';
+    }
+  }
+  document.addEventListener('DOMContentLoaded', loadSeasonStats);
+  </script>
+  
+
+</body>
+</html>

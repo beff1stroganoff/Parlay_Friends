@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>My Parlay | Parlay Friends</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <img src="Images/Parlay_Friends_Logo_Vectorized.svg" class="logo" alt="Logo">
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="lines.html">Back to Lines</a>
+    </nav>
+  </header>
+
+  <main>
+    <h2>My Parlay</h2>
+    <div id="parlay-section" class="line-item"></div>
+
+    <!-- ✅ Bet Amount (hidden for points leagues) -->
+    <div class="line-item" id="bet-amount-section">
+      <label for="bet-amount">Bet Amount ($):</label>
+      <input id="bet-amount" type="number" min="1" value="10" />
+      <p id="potential-payout"></p>
+    </div>
+
+    <div class="line-item">
+      <label for="week">Week #:</label>
+      <input type="number" id="week" min="1" required>
+    </div>
+
+    <div class="center mt-4">
+      <button id="clear-parlay">Clear Parlay</button>
+      <button id="submit-parlay">Submit My Parlay</button>
+    </div>
+  </main>
+
+  <footer>
+    <p>&copy; 2025 Parlay Friends. All rights reserved.</p>
+  </footer>
+
+<script>
+// ✅ League setup
+const leagueId = localStorage.getItem('leagueId');
+const token = localStorage.getItem('token');
+let leagueType = 'classic'; // default until fetched
+
+if (!leagueId) {
+  alert('No league selected. Please return to your dashboard.');
+  window.location.href = 'dashboard.html';
+}
+
+// ✅ Fetch league settings to determine type
+async function getLeagueSettings() {
+  try {
+    const res = await fetch(`/league/${leagueId}`, {
+      headers: {
+        'Authorization': 'Bearer ' + token
+      }
+    });
+    const league = await res.json();
+    if (res.ok) {
+      leagueType = league.settings.leagueType;
+      if (leagueType === 'points') {
+        document.getElementById('bet-amount-section').style.display = 'none';
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching league settings:', err);
+  }
+}
+getLeagueSettings();
+
+// ✅ Odds conversion
+function americanToDecimal(odds) {
+  return odds > 0 ? (odds / 100 + 1) : (100 / Math.abs(odds) + 1);
+}
+
+// ✅ Render parlay
+function updateParlayPage() {
+  const parlay = JSON.parse(localStorage.getItem('parlay')) || [];
+  const parlaySection = document.getElementById('parlay-section');
+  const payoutText = document.getElementById('potential-payout');
+  const betAmountInput = document.getElementById('bet-amount');
+
+  parlaySection.innerHTML = '';
+
+  if (parlay.length === 0) {
+    parlaySection.innerHTML = '<p class="center">You have no picks in your parlay.</p>';
+    if (payoutText) payoutText.textContent = '';
+    return;
+  }
+
+  let totalMultiplier = 1;
+
+  parlay.forEach((pick, index) => {
+    const decimalOdds = americanToDecimal(pick.odds);
+    totalMultiplier *= decimalOdds;
+
+    const pickDiv = document.createElement('div');
+    pickDiv.className = 'line-item';
+    pickDiv.innerHTML = `
+      <span>${pick.team} (${pick.type.toUpperCase()}) @ ${pick.odds > 0 ? '+' + pick.odds : pick.odds}</span>
+      <button class="remove-pick" data-index="${index}">Remove</button>
+    `;
+    parlaySection.appendChild(pickDiv);
+  });
+
+  if (leagueType === 'classic') {
+    const betAmount = parseFloat(betAmountInput.value) || 0;
+    const potentialPayout = (betAmount * totalMultiplier).toFixed(2);
+    payoutText.textContent = `Potential Payout: $${potentialPayout}`;
+  }
+}
+
+// ✅ Remove individual pick
+document.addEventListener('click', (e) => {
+  if (e.target.classList.contains('remove-pick')) {
+    const index = e.target.getAttribute('data-index');
+    let parlay = JSON.parse(localStorage.getItem('parlay')) || [];
+    parlay.splice(index, 1);
+    localStorage.setItem('parlay', JSON.stringify(parlay));
+    updateParlayPage();
+  }
+});
+
+// ✅ Clear parlay
+document.getElementById('clear-parlay').addEventListener('click', () => {
+  localStorage.removeItem('parlay');
+  updateParlayPage();
+});
+
+// ✅ Update payout on bet amount change
+document.getElementById('bet-amount').addEventListener('input', updateParlayPage);
+
+// ✅ Submit parlay
+document.getElementById('submit-parlay').addEventListener('click', async () => {
+  const week = parseInt(document.getElementById('week').value);
+  const parlay = JSON.parse(localStorage.getItem('parlay')) || [];
+
+  if (!week || parlay.length === 0 || !token) {
+    alert('Missing week, picks, or not logged in.');
+    return;
+  }
+
+  const totalDecimalOdds = parlay.reduce((acc, pick) => acc * americanToDecimal(pick.odds), 1);
+
+  const payload = {
+    leagueId,
+    week,
+    picks: parlay,
+    odds: totalDecimalOdds,
+    ...(leagueType === 'classic' && { betAmount: parseFloat(document.getElementById('bet-amount').value) || 0 })
+  };
+
+  try {
+    const res = await fetch('/api/parlay/submit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await res.json();
+    if (res.ok) {
+      alert('Parlay submitted successfully!');
+      localStorage.removeItem('parlay');
+      window.location.href = `league_home.html?leagueId=${leagueId}`;
+    } else {
+      alert('Error: ' + (result.error || 'Failed to submit parlay'));
+    }
+  } catch (err) {
+    console.error('Error submitting parlay:', err);
+    alert('Server error submitting parlay.');
+  }
+});
+
+updateParlayPage();
+</script>
+</body>
+</html>

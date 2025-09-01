@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Start a League - Parlay Friends</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="start_league.js" defer></script>
+</head>
+<body>
+  <header>
+    <img src="Images/Parlay_Friends_Logo_Vectorized.svg" class="logo" alt="Parlay Friends Logo">
+    <nav>
+      <a href="dashboard.html" class="button">Back to Dashboard</a>
+    </nav>
+  </header>
+
+  <main>
+    <h2>Start a League</h2>
+    <form id="startLeagueForm" class="line-item">
+      <label for="leagueName">League Name</label>
+      <input type="text" id="leagueName" name="leagueName" required>
+
+      <label for="passkey">Passkey</label>
+      <textarea id="passkey" name="passkey" required></textarea>
+
+      <button type="submit">Create League</button>
+    </form>
+  </main>
+
+  <footer>
+    <p>&copy; 2025 Parlay Friends. All rights reserved.</p>
+  </footer>
+</body>
+</html>

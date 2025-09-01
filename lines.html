@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NFL Betting Lines | Parlay Friends</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <img src="Images/Parlay_Friends_Logo_Vectorized.svg" class="logo" alt="Logo">
+    <p style="text-align:center">Current League: <strong id="current-league-id"></strong></p>
+
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="sign_up.html">Sign Up</a>
+      <a href="start_league.html">Leagues</a>
+    </nav>
+  </header>
+
+  <main>
+    <h2>NFL Live Betting Lines</h2>
+    <div id="odds-container"></div>
+  </main>
+
+  <footer>
+    <p>&copy; 2025 Parlay Friends. All rights reserved.</p>
+  </footer>
+
+  <!-- ✅ Parlay Popup -->
+  <div id="parlay-popup" class="parlay-popup hidden">
+    <h3>My Parlay</h3>
+    <ul id="parlay-picks"></ul>
+    <div id="parlay-info">
+      <p id="total-odds"></p>
+      <p id="potential-payout"></p>
+    </div>
+    <button id="submit-parlay" class="btn-submit">Submit Parlay</button>
+    <button id="clear-parlay" class="btn-clear">Clear Parlay</button>
+  </div>
+
+<script>
+// ✅ League ID
+const params = new URLSearchParams(window.location.search);
+const leagueIdFromUrl = params.get('leagueId');
+if (leagueIdFromUrl) localStorage.setItem('leagueId', leagueIdFromUrl);
+const leagueId = localStorage.getItem('leagueId');
+if (!leagueId) {
+  alert('Missing league ID — please return to your league home page.');
+  window.location.href = 'dashboard.html';
+}
+document.getElementById('current-league-id').textContent = leagueId;
+
+// ✅ Load NFL Odds Only
+async function loadNFL() {
+  const container = document.getElementById('odds-container');
+  container.innerHTML = '';
+
+  try {
+    const res = await fetch('/api/odds?sport=americanfootball_nfl');
+    const data = await res.json();
+    if (!Array.isArray(data)) return;
+
+    const sportHeader = document.createElement('h3');
+    sportHeader.textContent = `NFL Live Betting Lines`;
+    container.appendChild(sportHeader);
+
+    data.forEach(game => renderGame(container, game));
+    attachBetListeners();
+  } catch (err) {
+    console.error('Failed to fetch NFL odds:', err);
+  }
+  // lines.html (inside loadNFL)
+const res = await fetch('/api/odds?sport=americanfootball_nfl'); // use absolute URL
+const data = await res.json();
+if (!Array.isArray(data)) {
+  console.error('Odds API error:', data);
+  document.getElementById('odds-container').innerHTML =
+    `<div class="line-item">Could not load odds: ${data.error || 'Unknown error'}</div>`;
+  return;
+}
+
+}
+
+
+// ✅ Render NFL Game
+function renderGame(container, game) {
+  const homeTeam = game.home_team;
+  const awayTeam = game.away_team;
+  const commenceTime = new Date(game.commence_time).toLocaleString();
+  const bookmaker = game.bookmakers.find(b => b.title === 'FanDuel') || game.bookmakers[0];
+
+  const gameDiv = document.createElement('div');
+  gameDiv.className = 'line-item';
+  gameDiv.innerHTML = `<div><h4>${awayTeam} @ ${homeTeam}</h4><p>${commenceTime}</p></div>`;
+
+  // ✅ Moneyline
+  const h2h = bookmaker?.markets?.find(m => m.key === 'h2h');
+  if (h2h) {
+    const awayML = decimalToAmerican(h2h.outcomes.find(o => o.name === awayTeam)?.price);
+    const homeML = decimalToAmerican(h2h.outcomes.find(o => o.name === homeTeam)?.price);
+    gameDiv.innerHTML += `
+      <div class="center mt-2">
+        <button class="bet-line" data-type="moneyline" data-team="${awayTeam}" data-odds="${awayML}">
+          ${awayTeam} ML (${awayML > 0 ? '+' + awayML : awayML})
+        </button>
+        <button class="bet-line" data-type="moneyline" data-team="${homeTeam}" data-odds="${homeML}">
+          ${homeTeam} ML (${homeML > 0 ? '+' + homeML : homeML})
+        </button>
+      </div>`;
+  }
+
+  // ✅ Spread
+  const spreads = bookmaker?.markets?.find(m => m.key === 'spreads');
+  if (spreads) {
+    spreads.outcomes.forEach(o => {
+      const spreadOdds = decimalToAmerican(o.price);
+      gameDiv.innerHTML += `
+        <div class="center mt-1">
+          <button class="bet-line" data-type="spread" data-team="${o.name}" data-odds="${spreadOdds}">
+            ${o.name} ${o.point > 0 ? '+' + o.point : o.point} (${spreadOdds > 0 ? '+' + spreadOdds : spreadOdds})
+          </button>
+        </div>`;
+    });
+  }
+
+  // ✅ Player Props
+  const playerMarkets = bookmaker?.markets?.filter(m =>
+    m.key.includes('player_rush_yds') ||
+    m.key.includes('player_reception_yds') ||
+    m.key.includes('player_tds_over')
+  ) || [];
+
+  if (playerMarkets.length > 0) {
+  gameDiv.innerHTML += `<div><strong>Player Props</strong></div>`;
+  playerMarkets.forEach(market => {
+    let marketLabel = market.description || market.key;
+if (market.key.includes('player_reception_yds')) marketLabel = 'Receiving Yards';
+if (market.key.includes('player_rush_yds')) marketLabel = 'Rushing Yards';
+if (market.key.includes('player_tds_over')) marketLabel = 'Touchdowns (Over)';
+
+
+    market.outcomes.forEach(o => {
+      const propOdds = decimalToAmerican(o.price);
+      gameDiv.innerHTML += `
+        <div class="center mt-1">
+          <button class="bet-line" data-type="prop" data-team="${o.name}" data-odds="${propOdds}">
+            ${marketLabel}: ${o.name} (${propOdds > 0 ? '+' + propOdds : propOdds})
+          </button>
+        </div>`;
+    });
+  });
+}
+
+
+  container.appendChild(gameDiv);
+}
+
+// ✅ Odds conversion
+function decimalToAmerican(decimal) {
+  if (!decimal) return 0;
+  return decimal >= 2 ? Math.round((decimal - 1) * 100) : Math.round(-100 / (decimal - 1));
+}
+function americanToDecimal(odds) {
+  return odds > 0 ? (odds / 100 + 1) : (100 / Math.abs(odds) + 1);
+}
+
+// ✅ Parlay handling
+function addToParlay(pick) {
+  let parlay = JSON.parse(localStorage.getItem('parlay')) || [];
+  parlay.push(pick);
+  localStorage.setItem('parlay', JSON.stringify(parlay));
+  updateParlayPopup();
+}
+function updateParlayPopup() {
+  const parlay = JSON.parse(localStorage.getItem('parlay')) || [];
+  const parlayPicks = document.getElementById('parlay-picks');
+  const parlayPopup = document.getElementById('parlay-popup');
+  const payoutText = document.getElementById('potential-payout');
+  const oddsText = document.getElementById('total-odds');
+
+  parlayPicks.innerHTML = '';
+
+  if (parlay.length === 0) {
+    parlayPopup.classList.add('hidden');
+    payoutText.textContent = '';
+    oddsText.textContent = '';
+    return;
+  }
+
+  parlayPopup.classList.remove('hidden');
+
+  let totalMultiplier = 1;
+  parlay.forEach((pick, index) => {
+    totalMultiplier *= americanToDecimal(pick.odds);
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${pick.team} (${pick.type}) @ ${pick.odds > 0 ? '+' + pick.odds : pick.odds}</span>
+                    <button class="remove-pick" data-index="${index}">X</button>`;
+    parlayPicks.appendChild(li);
+  });
+
+  oddsText.textContent = `Total Odds: ${totalMultiplier.toFixed(2)} (Decimal)`;
+  payoutText.textContent = '';
+}
+
+// ✅ Event listeners
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('remove-pick')) {
+    const index = e.target.getAttribute('data-index');
+    let parlay = JSON.parse(localStorage.getItem('parlay')) || [];
+    parlay.splice(index, 1);
+    localStorage.setItem('parlay', JSON.stringify(parlay));
+    updateParlayPopup();
+  }
+});
+document.getElementById('clear-parlay').addEventListener('click', () => {
+  localStorage.removeItem('parlay');
+  updateParlayPopup();
+});
+function attachBetListeners() {
+  document.querySelectorAll('.bet-line').forEach(button => {
+    button.addEventListener('click', () => {
+      const pick = {
+        type: button.dataset.type,
+        team: button.dataset.team,
+        odds: parseInt(button.dataset.odds)
+      };
+      addToParlay(pick);
+    });
+  });
+}
+
+document.getElementById('submit-parlay').addEventListener('click', () => {
+  window.location.href = 'my_parlay.html';
+});
+
+
+// ✅ Load NFL immediately
+loadNFL();
+updateParlayPopup();
+</script>
+</body>
+</html>
