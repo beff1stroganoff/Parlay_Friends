@@ -70,15 +70,6 @@ async function loadNFL() {
   } catch (err) {
     console.error('Failed to fetch NFL odds:', err);
   }
-  // lines.html (inside loadNFL)
-const res = await fetch('/api/odds?sport=americanfootball_nfl'); // use absolute URL
-const data = await res.json();
-if (!Array.isArray(data)) {
-  console.error('Odds API error:', data);
-  document.getElementById('odds-container').innerHTML =
-    `<div class="line-item">Could not load odds: ${data.error || 'Unknown error'}</div>`;
-  return;
-}
 
 }
 
