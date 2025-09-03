@@ -1,450 +1,401 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Make Picks – NFL</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link href="style.css" rel="stylesheet" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NFL Lines • Parlay Friends</title>
   <style>
-    .grid { display: grid; gap: 16px; grid-template-columns: 1fr 360px; }
-    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
-    .card { background:#fff; border-radius:14px; padding:16px; box-shadow:0 8px 20px rgba(0,0,0,.06); }
-    .muted { color:#666; font-size:.9rem; }
-    .game { border:1px solid #eee; border-radius:12px; padding:12px; margin-bottom:12px; }
-    .row { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
-    .pill { display:inline-block; padding:6px 10px; border-radius:999px; background:#f3f4f6; margin-right:6px; font-size:.85rem; }
-    .btn { border:1px solid #ddd; padding:8px 10px; border-radius:10px; background:#fafafa; cursor:pointer; }
-    .btn:hover { background:#f0f0f0; }
-    .btn-primary { background:#0ea5e9; color:#fff; border-color:#0ea5e9; }
-    .btn-primary:hover { filter:brightness(.95); }
-    .danger { color:#b91c1c; }
-    .success { color:#065f46; }
-    .warn { color:#92400e; }
-    .hr { height:1px; background:#eee; margin:12px 0; }
-    .betslip-item { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px dashed #eee; }
-    .nowrap { white-space:nowrap; }
-    .rules { background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:10px; margin-top:10px; }
-    .errors { background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; padding:10px; margin-top:10px; }
+    :root{
+      --bg:#f3f4f6;
+      --card:#ffffff;
+      --muted:#6b7280;
+      --ink:#111827;
+      --brand:#10b981;
+      --brand-ink:#065f46;
+      --border:#e5e7eb;
+      --zebra:#f9fafb;
+      --chip:#111827;
+      --chip-ink:#ffffff;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      background:var(--bg);
+      color:var(--ink);
+    }
+
+    /* Header */
+    .site-header{
+      background:#fff;
+      border-bottom:1px solid var(--border);
+    }
+    .bar{
+      max-width:1100px;
+      margin:0 auto;
+      padding:14px 16px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .logo{
+      display:flex; align-items:center; gap:10px;
+      font-weight:700; font-size:18px;
+      color:var(--ink); text-decoration:none;
+    }
+    .crumbs{
+      font-size:14px; color:var(--muted);
+    }
+
+    /* Layout */
+    .wrap{
+      max-width:1100px;
+      margin:24px auto 48px;
+      padding:0 16px;
+    }
+
+    .toolbar{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:12px; margin-bottom:16px;
+    }
+    .btn{
+      appearance:none; border:1px solid var(--border);
+      padding:10px 14px; border-radius:10px; background:#fff; cursor:pointer;
+      font-weight:600;
+    }
+    .btn.secondary{ background:#fff; color:#111; }
+    .btn.brand{ background:var(--brand); color:#fff; border-color:var(--brand); }
+    .btn:disabled{ opacity:.6; cursor:not-allowed; }
+
+    /* Cards */
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:14px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.04);
+      overflow:hidden;
+    }
+    .card h2{
+      margin:0; padding:14px 16px;
+      border-bottom:1px solid var(--border);
+      font-size:16px;
+    }
+
+    /* Tabs */
+    .tabs{
+      display:flex; gap:8px; padding:10px; border-bottom:1px solid var(--border);
+      background: #fff;
+    }
+    .tab{
+      border:1px solid var(--border);
+      background:#fff; padding:8px 12px; border-radius:999px; cursor:pointer;
+      font-size:14px; font-weight:600; color:#111;
+    }
+    .tab.active{ background:#111827; color:#fff; border-color:#111827; }
+
+    /* Lines table */
+    .table{
+      width:100%; border-collapse:collapse;
+    }
+    .table thead th{
+      text-align:left; font-size:12px; color:var(--muted); font-weight:700;
+      padding:10px 12px; background:#fff; position:sticky; top:0; z-index:1;
+      border-bottom:1px solid var(--border);
+    }
+    .row{
+      display:grid;
+      grid-template-columns: 1.6fr 0.9fr 0.9fr 0.9fr 1.2fr;
+      gap:8px; align-items:center;
+      padding:10px 12px; border-bottom:1px solid var(--border);
+      background:#fff;
+    }
+    .row:nth-child(even){ background:var(--zebra); }
+    .matchup{ display:flex; flex-direction:column; gap:6px; }
+    .teams{ font-weight:700; }
+    .time{ font-size:12px; color:var(--muted); }
+    .cell{ display:flex; gap:8px; align-items:center; }
+
+    .price{
+      display:inline-flex; align-items:center; justify-content:center;
+      padding:10px 12px; min-width:78px;
+      border:1px solid var(--border); border-radius:10px;
+      background:#fff; cursor:pointer; font-weight:700;
+      transition: transform .02s ease, box-shadow .12s ease;
+    }
+    .price:hover{ transform: translateY(-1px); box-shadow:0 2px 7px rgba(0,0,0,.06); }
+    .price.selected{ background: var(--chip); color:var(--chip-ink); border-color:var(--chip); }
+
+    .empty{
+      padding:18px; color:var(--muted);
+    }
+
+    /* Make sure NOTHING invisible overlays the grid */
+    #overlay, .popup, .modal, .backdrop{
+      pointer-events:none !important; opacity:0 !important; display:none !important;
+    }
+
+    /* Responsive */
+    @media (max-width:780px){
+      .row{ grid-template-columns: 1.5fr 1fr 1fr; }
+      .col-hide{ display:none; }
+    }
   </style>
 </head>
 <body>
-  <div class="container" style="max-width:1200px; margin:32px auto; padding:0 16px;">
-    <div class="row" style="margin-bottom:16px">
-      <div>
-        <h1>NFL Lines</h1>
-        <div id="context" class="muted">Loading league/week...</div>
-      </div>
-      <div class="row">
-        <a class="btn" id="backToLeague" href="#">← Back to League</a>
+  <header class="site-header">
+    <div class="bar">
+      <a class="logo" href="index.html">
+        <span>Parlay Friends</span>
+      </a>
+      <div class="crumbs">NFL • Lines</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="toolbar">
+      <button id="backBtn" class="btn secondary">← Back to League Home</button>
+      <div style="display:flex; gap:8px;">
+        <button id="openParlay" class="btn brand">My Parlay</button>
       </div>
     </div>
 
-    <div class="grid">
-      <!-- LEFT: GAMES -->
-      <div class="card">
-        <div class="row" style="margin-bottom:8px">
-          <div>
-            <strong>Market:</strong>
-            <span class="pill">Moneyline</span>
-            <span class="pill">Spread</span>
-            <span class="pill">Total</span>
-            <span class="pill">Player Props (when available)</span>
-          </div>
-          <div class="muted">Data from The Odds API</div>
-        </div>
-        <div id="odds-container">Loading NFL odds…</div>
+    <div class="card">
+      <div class="tabs" role="tablist" aria-label="Markets">
+        <button class="tab active" data-market="h2h" aria-selected="true">Moneyline</button>
+        <button class="tab" data-market="spreads">Spread</button>
+        <button class="tab" data-market="totals">Total</button>
+        <button class="tab" data-market="player_props">Player Props</button>
       </div>
 
-      <!-- RIGHT: BETSLIP -->
-      <div class="card">
-        <h3>Your Parlay</h3>
-        <div id="betslip"></div>
-        <div class="hr"></div>
+      <h2 id="marketTitle">NFL • Moneyline</h2>
 
-        <!-- live rules pulled from league -->
-        <div id="rules" class="rules muted">Loading league rules…</div>
-
-        <!-- validation messages appear here -->
-        <div id="validationErrors" class="errors" style="display:none"></div>
-
-        <div class="hr"></div>
-        <div id="totals" class="row">
-          <div class="muted">Combined Odds</div>
-          <div><strong id="combinedDecimal">1.00</strong> <span class="muted">(<span id="combinedAmerican">-10000</span>)</span></div>
-        </div>
-        <div class="row" style="margin-top:12px">
-          <button id="clearSlip" class="btn">Clear</button>
-          <button id="submitParlay" class="btn btn-primary">Submit Parlay</button>
-        </div>
-        <div class="muted" style="margin-top:10px">Minimum legs/odds rules are enforced before submission.</div>
+      <div id="grid">
+        <div class="empty">Loading NFL lines…</div>
       </div>
     </div>
-  </div>
+  </main>
 
   <script>
-    // ===== URL / CONTEXT =====
-    const q = new URLSearchParams(location.search);
-    const leagueId = q.get('leagueId');
-    const week = Number(q.get('week') || 1);
+    // --- Utilities / URL context ---
+    const params = new URLSearchParams(window.location.search);
+    const leagueId = params.get('leagueId');
 
-    const contextEl = document.getElementById('context');
-    const backBtn = document.getElementById('backToLeague');
-    if (!leagueId) {
-      alert('No leagueId provided. Returning to dashboard.');
-      location.href = 'dashboard.html';
-    } else {
-      contextEl.textContent = `League: ${leagueId} • Week: ${week}`;
-      backBtn.href = `league_home.html?leagueId=${encodeURIComponent(leagueId)}`;
-    }
+    const backBtn = document.getElementById('backBtn');
+    backBtn.onclick = () => {
+      const target = leagueId ? `league_home.html?leagueId=${encodeURIComponent(leagueId)}` : 'dashboard.html';
+      window.location.href = target;
+    };
 
-    // ===== UTILS =====
-    function toAmerican(decimal) {
-      if (!decimal || decimal <= 1) return -10000;
-      return decimal >= 2
-        ? Math.round((decimal - 1) * 100)
-        : Math.round(-100 / (decimal - 1));
-    }
-    function americanToDecimal(american) {
-      const n = Number(american);
-      if (!isFinite(n)) return 1;
-      return n >= 0 ? 1 + n / 100 : 1 + 100 / Math.abs(n);
-    }
-    function fmtAmerican(n) { return n > 0 ? `+${n}` : `${n}`; }
+    document.getElementById('openParlay').onclick = () => {
+      const target = leagueId ? `my_parlay.html?leagueId=${encodeURIComponent(leagueId)}` : 'my_parlay.html';
+      window.location.href = target;
+    };
 
-    // ===== STATE =====
-    let slip = []; // [{gameId, market, side, team, line, priceDecimal, oddsAmerican, book}]
-    let leagueSettings = null; // { numLegs, minLegOdds, minTotalOdds, ... }
+    // --- Tabs / markets ---
+    const tabs = Array.from(document.querySelectorAll('.tab'));
+    const grid = document.getElementById('grid');
+    const title = document.getElementById('marketTitle');
 
-    function renderSlip() {
-      const el = document.getElementById('betslip');
-      el.innerHTML = '';
+    const MARKET_LABELS = {
+      h2h: 'Moneyline',
+      spreads: 'Spread',
+      totals: 'Total',
+      player_props: 'Player Props'
+    };
 
-      if (slip.length === 0) {
-        el.innerHTML = '<div class="muted">No legs yet. Click a price to add a leg.</div>';
-      } else {
-        slip.forEach((leg, idx) => {
-          const row = document.createElement('div');
-          row.className = 'betslip-item';
-          row.innerHTML = `
-            <div>
-              <div><strong>${leg.team}</strong> <span class="muted">(${leg.market}${leg.line !== undefined ? ' ' + leg.line : ''})</span></div>
-              <div class="muted">${leg.book} • ${leg.side}</div>
-            </div>
-            <div class="nowrap"><strong>${fmtAmerican(leg.oddsAmerican)}</strong> <button class="btn" data-remove="${idx}">✕</button></div>
-          `;
-          el.appendChild(row);
+    tabs.forEach(t => {
+      t.addEventListener('click', () => {
+        tabs.forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        const market = t.dataset.market;
+        title.textContent = `NFL • ${MARKET_LABELS[market]}`;
+        loadLines(market);
+      });
+    });
+
+    // --- Fetch + Render ---
+    async function loadLines(market = 'h2h'){
+      try{
+        grid.innerHTML = `<div class="empty">Loading ${MARKET_LABELS[market]}…</div>`;
+
+        // Your server should honor the 'market' filter; if not, we filter client-side
+        const res = await fetch(`/api/odds?sport=americanfootball_nfl${market ? `&market=${market}` : ''}`, {
+          headers:{
+            'Authorization':'Bearer ' + (localStorage.getItem('token') || '')
+          }
         });
+        if(!res.ok){
+          throw new Error(`Failed to load odds (${res.status})`);
+        }
+        const data = await res.json();
+
+        if(!Array.isArray(data) || data.length === 0){
+          grid.innerHTML = `<div class="empty">No lines available.</div>`;
+          return;
+        }
+
+        renderGrid(data, market);
+      }catch(err){
+        console.error(err);
+        grid.innerHTML = `<div class="empty">Could not load lines. ${err.message}</div>`;
       }
+    }
 
-      // compute combined decimal odds
-      const combined = slip.reduce((acc, l) => acc * (l.priceDecimal || 1), 1);
-      document.getElementById('combinedDecimal').textContent = combined.toFixed(3);
-      document.getElementById('combinedAmerican').textContent = fmtAmerican(toAmerican(Number(combined)));
+    function renderGrid(events, market){
+      // Build header
+      const header = `
+        <div class="row" role="row" style="background:#fff; position:sticky; top:0; z-index:1;">
+          <div class="cell" style="font-size:12px; color:#6b7280; font-weight:700;">Matchup</div>
+          <div class="cell col-hide" style="font-size:12px; color:#6b7280; font-weight:700;">${MARKET_LABELS.h2h}</div>
+          <div class="cell" style="font-size:12px; color:#6b7280; font-weight:700;">${MARKET_LABELS.spreads}</div>
+          <div class="cell" style="font-size:12px; color:#6b7280; font-weight:700;">${MARKET_LABELS.totals}</div>
+          <div class="cell" style="font-size:12px; color:#6b7280; font-weight:700;">Best Price</div>
+        </div>
+      `;
 
-      // wire remove buttons
-      el.querySelectorAll('[data-remove]').forEach(btn => {
-        btn.addEventListener('click', e => {
-          const i = Number(e.currentTarget.getAttribute('data-remove'));
-          slip.splice(i, 1);
-          renderSlip();
-          renderValidation(); // update errors dynamically when removing
-        });
+      const rows = events.map(ev => {
+        const kickoff = ev.commence_time ? new Date(ev.commence_time) : null;
+        const timeStr = kickoff ? kickoff.toLocaleString() : 'TBD';
+
+        // Normalize market selections (these shapes may vary by feed)
+        const best = pickBestPrices(ev, market);
+
+        return `
+          <div class="row" role="row">
+            <div class="matchup">
+              <div class="teams">${ev.away_team} @ ${ev.home_team}</div>
+              <div class="time">${timeStr}</div>
+            </div>
+
+            <div class="cell col-hide">
+              ${best.h2hHTML}
+            </div>
+
+            <div class="cell">
+              ${best.spreadHTML}
+            </div>
+
+            <div class="cell">
+              ${best.totalHTML}
+            </div>
+
+            <div class="cell">
+              ${best.primaryHTML}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      grid.innerHTML = header + rows;
+
+      // Wire click handlers
+      grid.querySelectorAll('button.price').forEach(btn => {
+        btn.addEventListener('click', onPickClick);
       });
     }
 
-    document.getElementById('clearSlip').addEventListener('click', () => {
-      slip = [];
-      renderSlip();
-      renderValidation();
-    });
-
-    // ===== LEAGUE RULES =====
-    async function loadLeagueRules() {
-      const rulesEl = document.getElementById('rules');
-      try {
-        const res = await fetch(`/league/${leagueId}`);
-        const league = await res.json();
-        if (!res.ok) throw new Error(league?.error || 'Failed to load league');
-
-        leagueSettings = league.settings || {};
-        const { numLegs, minLegOdds, minTotalOdds, leagueType } = leagueSettings;
-
-        rulesEl.innerHTML = `
-          <div><strong>Rules</strong></div>
-          <div>Format: <strong>${leagueType}</strong></div>
-          <div>Required legs: <strong>${numLegs}</strong></div>
-          <div>Min leg odds: <strong>${minLegOdds > 0 ? '+' + minLegOdds : minLegOdds}</strong></div>
-          <div>Min total parlay odds: <strong>+${minTotalOdds}</strong></div>
-        `;
-      } catch (e) {
-        console.error('League rules error:', e);
-        rulesEl.innerHTML = '<span class="warn">Could not load league rules. Submission will be blocked.</span>';
-      }
-    }
-
-    function renderValidation() {
-      const box = document.getElementById('validationErrors');
-      if (!leagueSettings) { box.style.display = 'none'; box.innerHTML = ''; return; }
-
-      const msgs = [];
-      const { numLegs, minLegOdds, minTotalOdds } = leagueSettings;
-
-      // 1) legs count — EXACT match (change to >= if you want “at least”)
-      if (Number.isFinite(numLegs) && slip.length !== Number(numLegs)) {
-        msgs.push(`Your parlay must have exactly ${numLegs} leg(s). You currently have ${slip.length}.`);
-      }
-
-      // 2) each leg meets minLegOdds (American)
-      if (Number.isFinite(minLegOdds)) {
-        const badLegs = slip
-          .map((l, i) => ({ i, am: Number(l.oddsAmerican), label: `${l.team} ${fmtAmerican(l.oddsAmerican)}` }))
-          .filter(x => !(x.am >= Number(minLegOdds))); // e.g., -160 >= -150 is false => invalid
-        if (badLegs.length) {
-          msgs.push(`The following leg(s) are below the minimum leg odds (${minLegOdds > 0 ? '+'+minLegOdds : minLegOdds}): ${badLegs.map(b => b.label).join(', ')}`);
-        }
-      }
-
-      // 3) total meets minTotalOdds (compare in DECIMAL for correctness)
-      if (Number.isFinite(minTotalOdds)) {
-        const combinedDecimal = slip.reduce((acc, l) => acc * (l.priceDecimal || 1), 1);
-        const minTotalDecimal = americanToDecimal(Number(minTotalOdds));
-        if (combinedDecimal < minTotalDecimal) {
-          const combinedAm = toAmerican(combinedDecimal);
-          msgs.push(`Your total parlay odds ${fmtAmerican(combinedAm)} are below the minimum required +${minTotalOdds}. Add stronger legs or more plus-money.`);
-        }
-      }
-
-      if (msgs.length) {
-        box.style.display = '';
-        box.innerHTML = `<div class="warn"><strong>Fix these before submitting:</strong></div><ul style="margin:8px 0 0 16px">${msgs.map(m => `<li>${m}</li>`).join('')}</ul>`;
-      } else {
-        box.style.display = 'none';
-        box.innerHTML = '';
-      }
-
-      return msgs;
-    }
-
-    // ===== FETCH NFL ODDS =====
-    async function loadNFL() {
-      const container = document.getElementById('odds-container');
-      try {
-        const res = await fetch('/api/odds?sport=americanfootball_nfl');
-        const data = await res.json();
-
-        if (!Array.isArray(data) || data.length === 0) {
-          container.innerHTML = '<div class="muted">No NFL odds available.</div>';
-          return;
-        }
-
-        container.innerHTML = '';
-        data.forEach(game => {
-          const div = document.createElement('div');
-          div.className = 'game';
-
-          const home = game?.home_team || 'Home';
-          const away = game?.away_team || 'Away';
-          const commence = game?.commence_time ? new Date(game.commence_time).toLocaleString() : 'TBD';
-
-          div.innerHTML = `
-            <div class="row">
-              <div>
-                <div><strong>${away}</strong> @ <strong>${home}</strong></div>
-                <div class="muted">${commence}</div>
-              </div>
-              <div class="muted">Game ID: ${game.id || 'n/a'}</div>
-            </div>
-            <div class="hr"></div>
-            <div class="markets"></div>
-          `;
-
-          const book = (game.bookmakers && game.bookmakers[0]) || null;
-          const marketsEl = div.querySelector('.markets');
-
-          if (!book || !Array.isArray(book.markets)) {
-            marketsEl.innerHTML = '<div class="muted">No markets available for this game.</div>';
-          } else {
-            const mIndex = {};
-            book.markets.forEach(m => { mIndex[m.key] = m; });
-
-            // Moneyline
-            if (mIndex.h2h && Array.isArray(mIndex.h2h.outcomes)) {
-              const ml = document.createElement('div');
-              ml.innerHTML = `<div style="margin:6px 0"><strong>${book.title}</strong> • Moneyline</div>`;
-              mIndex.h2h.outcomes.forEach(oc => {
-                const price = Number(oc.price);
-                const am = toAmerican(price);
-                const btn = document.createElement('button');
-                btn.className = 'btn';
-                btn.textContent = `${oc.name} ${fmtAmerican(am)}`;
-                btn.addEventListener('click', () => {
-                  slip.push({
-                    gameId: game.id, market: 'moneyline', side: oc.name,
-                    team: oc.name, priceDecimal: price, oddsAmerican: am, book: book.title
-                  });
-                  renderSlip();
-                  renderValidation();
-                });
-                ml.appendChild(btn);
-              });
-              marketsEl.appendChild(ml);
+    function pickBestPrices(ev, activeMarket){
+      // Expecting structure from The Odds API proxy e.g., ev.bookmakers[].markets[]
+      // This function is defensive: it searches by key names and falls back gracefully.
+      const byKey = (name) => {
+        const books = ev.bookmakers || [];
+        let out = [];
+        books.forEach(bk => {
+          (bk.markets || []).forEach(m => {
+            if((m.key || m.market) === name){
+              (m.outcomes || []).forEach(o => out.push({book: bk.title || bk.key, ...o, market: name}));
             }
-
-            // Spread
-            if (mIndex.spreads && Array.isArray(mIndex.spreads.outcomes)) {
-              const sp = document.createElement('div');
-              sp.innerHTML = `<div style="margin:6px 0"><strong>${book.title}</strong> • Spread</div>`;
-              mIndex.spreads.outcomes.forEach(oc => {
-                const price = Number(oc.price);
-                const am = toAmerican(price);
-                const line = oc.point;
-                const btn = document.createElement('button');
-                btn.className = 'btn';
-                btn.textContent = `${oc.name} ${line > 0 ? '+'+line : line} ${fmtAmerican(am)}`;
-                btn.addEventListener('click', () => {
-                  slip.push({
-                    gameId: game.id, market: 'spread', side: oc.name,
-                    team: oc.name, line, priceDecimal: price, oddsAmerican: am, book: book.title
-                  });
-                  renderSlip();
-                  renderValidation();
-                });
-                sp.appendChild(btn);
-              });
-              marketsEl.appendChild(sp);
-            }
-
-            // Totals
-            if (mIndex.totals && Array.isArray(mIndex.totals.outcomes)) {
-              const tot = document.createElement('div');
-              tot.innerHTML = `<div style="margin:6px 0"><strong>${book.title}</strong> • Total</div>`;
-              mIndex.totals.outcomes.forEach(oc => {
-                const price = Number(oc.price);
-                const am = toAmerican(price);
-                const line = oc.point;
-                const label = oc.name?.toUpperCase() || 'TOTAL';
-                const btn = document.createElement('button');
-                btn.className = 'btn';
-                btn.textContent = `${label} ${line} ${fmtAmerican(am)}`;
-                btn.addEventListener('click', () => {
-                  slip.push({
-                    gameId: game.id, market: 'total', side: label,
-                    team: label, line, priceDecimal: price, oddsAmerican: am, book: book.title
-                  });
-                  renderSlip();
-                  renderValidation();
-                });
-                tot.appendChild(btn);
-              });
-              marketsEl.appendChild(tot);
-            }
-          }
-
-          container.appendChild(div);
+          });
         });
-      } catch (e) {
-        console.error(e);
-        container.innerHTML = '<div class="danger">Failed to load NFL odds.</div>';
-      }
+        return out;
+      };
+
+      const moneyline = byKey('h2h');
+      const spreads   = byKey('spreads');
+      const totals    = byKey('totals');
+
+      const bestMLHome = bestByPrice(moneyline, o => o.name && /home|(\bhome\b)/i.test(o.name) ? 1 : (o.name === ev.home_team ? 1 : 0));
+      const bestMLAway = bestByPrice(moneyline, o => o.name && /away|(\baway\b)/i.test(o.name) ? 1 : (o.name === ev.away_team ? 1 : 0));
+
+      const bestSpread = spreads[0] || null; // Simplify: show a single best spread outcome (could expand)
+      const bestTotal  = totals[0]  || null;
+
+      const primary =
+        activeMarket === 'h2h' ? (bestMLHome || bestMLAway) :
+        activeMarket === 'spreads' ? bestSpread :
+        activeMarket === 'totals' ? bestTotal : null;
+
+      return {
+        h2hHTML: [
+          renderPriceBtn(bestMLAway, ev, 'h2h'),
+          renderPriceBtn(bestMLHome, ev, 'h2h')
+        ].join(''),
+
+        spreadHTML: renderPriceBtn(bestSpread, ev, 'spreads'),
+        totalHTML:  renderPriceBtn(bestTotal,  ev, 'totals'),
+        primaryHTML: renderPriceBtn(primary, ev, activeMarket)
+      };
     }
 
-    // ===== SUBMIT PARLAY (with validation) =====
-    function validateSlip() {
-      if (!leagueSettings) return ['League rules not loaded. Please wait and try again.'];
-      const errs = [];
-      const { numLegs, minLegOdds, minTotalOdds } = leagueSettings;
-
-      // count
-      if (Number.isFinite(numLegs) && slip.length !== Number(numLegs)) {
-        errs.push(`Your parlay must have exactly ${numLegs} leg(s). You currently have ${slip.length}.`);
-      }
-      // leg floor
-      if (Number.isFinite(minLegOdds)) {
-        const bad = slip.filter(l => Number(l.oddsAmerican) < Number(minLegOdds));
-        if (bad.length) {
-          errs.push(`At least one leg is below the minimum leg odds (${minLegOdds > 0 ? '+'+minLegOdds : minLegOdds}).`);
-        }
-      }
-      // total floor (compare in decimal for correctness)
-      if (Number.isFinite(minTotalOdds)) {
-        const combinedDecimal = slip.reduce((acc, l) => acc * (l.priceDecimal || 1), 1);
-        const minTotalDecimal = americanToDecimal(Number(minTotalOdds));
-        if (combinedDecimal < minTotalDecimal) {
-          const combinedAm = toAmerican(combinedDecimal);
-          errs.push(`Your total parlay odds ${fmtAmerican(combinedAm)} are below the minimum required +${minTotalOdds}.`);
-        }
-      }
-      return errs;
+    function bestByPrice(list, predicate){
+      // Try to pick a reasonable best; for simplicity, we’ll just take the first matching;
+      // You can upgrade this to truly “best odds” selection later.
+      return (list || []).find(() => true) || null;
     }
 
-    async function submitParlay() {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        alert('Please log in to submit a parlay.');
-        return;
-      }
-      if (!leagueId || !week) {
-        alert('Missing league or week.');
-        return;
-      }
-      if (slip.length === 0) {
-        alert('Add at least one leg.');
-        return;
-      }
-
-      // validate against league rules
-      const errs = validateSlip();
-      const errBox = document.getElementById('validationErrors');
-      if (errs.length) {
-        errBox.style.display = '';
-        errBox.innerHTML = `<div class="warn"><strong>Fix these before submitting:</strong></div><ul style="margin:8px 0 0 16px">${errs.map(e => `<li>${e}</li>`).join('')}</ul>`;
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
-      } else {
-        errBox.style.display = 'none';
-        errBox.innerHTML = '';
-      }
-
-      // Build the picks payload expected by your backend
-      const picks = slip.map(l => ({
-        team: l.team,
-        type: l.market,
-        odds: l.oddsAmerican
-      }));
-      const totalOdds = slip.reduce((acc, l) => acc * (l.priceDecimal || 1), 1);
-
-      try {
-        const res = await fetch('/api/parlay/submit', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + token
-          },
-          body: JSON.stringify({ leagueId, week, picks, odds: Number(totalOdds.toFixed(4)) })
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          console.error('Submit error:', data);
-          alert(data.error || 'Error submitting parlay.');
-          return;
-        }
-        alert('Parlay submitted!');
-        location.href = `league_home.html?leagueId=${encodeURIComponent(leagueId)}`;
-      } catch (err) {
-        console.error(err);
-        alert('Network/server error submitting parlay.');
-      }
+    function american(odds){
+      if(odds === undefined || odds === null) return '';
+      const n = Number(odds);
+      if(Number.isNaN(n)) return String(odds);
+      return n > 0 ? `+${n}` : `${n}`;
     }
 
-    document.getElementById('submitParlay').addEventListener('click', submitParlay);
+    function renderPriceBtn(outcome, ev, marketKey){
+      if(!outcome) return `<button class="price" disabled>—</button>`;
+      const label =
+        marketKey === 'spreads' ? `${outcome.point ?? ''} ${american(outcome.price ?? outcome.odds)}`
+        : marketKey === 'totals' ? `${outcome.name ?? 'Total'} ${outcome.point ?? ''} ${american(outcome.price ?? outcome.odds)}`
+        : `${outcome.name ?? ''} ${american(outcome.price ?? outcome.odds)}`;
 
-    // Init
-    (async function init() {
-      await loadLeagueRules();  // get rules first so we can validate live
-      loadNFL();
-      renderSlip();
-      renderValidation();
-    })();
+      // Pack minimal payload in dataset
+      const payload = {
+        leagueId: leagueId || null,
+        sport: 'NFL',
+        market: marketKey,
+        home: ev.home_team,
+        away: ev.away_team,
+        outcome: {
+          name: outcome.name || '',
+          point: outcome.point ?? null,
+          price: outcome.price ?? outcome.odds ?? null,
+          book: outcome.book || ''
+        },
+        eventId: ev.id || null,
+        kickoff: ev.commence_time || null
+      };
+
+      const safe = encodeURIComponent(JSON.stringify(payload));
+      return `<button class="price" data-payload="${safe}" type="button">${label}</button>`;
+    }
+
+    function onPickClick(e){
+      const btn = e.currentTarget;
+      const payload = JSON.parse(decodeURIComponent(btn.dataset.payload));
+
+      // Save to localStorage
+      const key = 'parlayItems';
+      const current = JSON.parse(localStorage.getItem(key) || '[]');
+      current.push(payload);
+      localStorage.setItem(key, JSON.stringify(current));
+
+      // Visual feedback
+      btn.classList.add('selected');
+      btn.blur();
+    }
+
+    // Initial load
+    loadLines('h2h');
   </script>
 </body>
 </html>
