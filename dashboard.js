@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-const sports = ['baseball_mlb', 'basketball_nba', 'icehockey_nhl', 'americanfootball_nfl'];
+const sports = ['americanfootball_nfl'];
 
 async function fetchLiveLines() {
   try {
