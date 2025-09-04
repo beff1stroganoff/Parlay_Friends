@@ -22,9 +22,7 @@
       padding: 8px 10px;
       cursor: pointer;
     }
-    button:hover, .btn:hover, .btn-primary:hover, .bet-line:hover {
-      background-color: #e5e7eb;
-    }
+    button:hover, .btn:hover, .btn-primary:hover, .bet-line:hover { background-color: #e5e7eb; }
     .btn-primary { background:#0ea5e9; color:#000; border-color:#0ea5e9; } /* keep black text */
     .danger { color:#b91c1c; }
     .success { color:#065f46; }
@@ -39,11 +37,12 @@
     details.props { border:1px solid #eee; border-radius:10px; padding:8px; background:#fafafa; }
     details.props summary { cursor:pointer; list-style:none; user-select:none; }
     details.props summary::-webkit-details-marker { display:none; }
-    .props-grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:8px; }
+    .props-grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; margin-top:8px; }
     @media (max-width:700px){ .props-grid { grid-template-columns:1fr; } }
-    .prop-block { border:1px solid #e5e7eb; background:#fff; border-radius:10px; padding:8px; }
+    .prop-block { border:1px solid #e5e7eb; background:#fff; border-radius:10px; padding:10px; }
     .prop-title { font-weight:600; font-size:.9rem; margin-bottom:6px; color:#111; }
     .prop-buttons { display:flex; flex-wrap:wrap; gap:6px; }
+    .prop-buttons .btn { line-height:1; }
   </style>
 </head>
 <body>
@@ -260,7 +259,7 @@
       ['player_pass_yds']
     ];
 
-    /* ---------- Render a game ---------- */
+    /* ---------- helper to push a leg ---------- */
     function pushLeg({game, bookTitle, key, label, side, who, line, priceDecimal}) {
       const am = toAmerican(priceDecimal);
       slip.push({
@@ -278,6 +277,7 @@
       renderValidation();
     }
 
+    /* ---------- Render a game ---------- */
     function renderGame(game, container) {
       const div = document.createElement('div');
       div.className = 'game';
@@ -379,7 +379,7 @@
       }
 
       /* --- Player Props (your exact list, with key aliases) --- */
-      // Build a map of which of your desired keys are present
+      // Build a list of the prop markets that exist for this game (respecting aliases)
       const presentPropKeys = [];
       PROP_KEY_GROUPS.forEach(group => {
         const found = group.find(k => mIndex[k]);
@@ -394,8 +394,9 @@
         summary.innerHTML = `<strong>Player Props</strong> <span class="muted">(tap to expand)</span>`;
         details.appendChild(summary);
 
-        const wrap = document.createElement('div');
-        wrap.className = 'props-grid';
+        // grid container
+        const grid = document.createElement('div');
+        grid.className = 'props-grid';
 
         presentPropKeys.forEach(({want, actual}) => {
           const market = mIndex[actual];
@@ -404,7 +405,7 @@
           const block = document.createElement('div');
           block.className = 'prop-block';
 
-          const label = prettyKey(want); // pretty print based on your desired key
+          const label = prettyKey(want); // pretty name (e.g., "Rush Yds", "Anytime Td")
           const title = document.createElement('div');
           title.className = 'prop-title';
           title.textContent = label;
@@ -417,40 +418,29 @@
             const price = Number(oc.price);
             if (!Number.isFinite(price)) return;
 
-            // Build a robust label:
-            // - "description" or "participant" often holds player name
-            // - name may include "Over/Under" or player for anytime/first TD
+            // Player name + side + line
             const who = oc.description || oc.participant || oc.player || oc.name || 'Player';
             const nameUpper = String(oc.name || '').toUpperCase();
             const side =
               nameUpper.includes('OVER')  ? 'Over'  :
               nameUpper.includes('UNDER') ? 'Under' :
               (want.includes('anytime_td') || want.includes('1st_td')) ? '' : oc.name || '';
-
             const line = (oc.point !== undefined && oc.point !== null) ? oc.point : '';
 
             const btn = document.createElement('button');
             btn.className = 'btn';
             btn.type = 'button';
             const am = toAmerican(price);
-
-            // Compose compact button text
-            const text = [
-              who,
-              side ? side : '',
-              (line !== '' ? line : ''),
-              fmtAmerican(am)
-            ].join(' ').replace(/\s+/g,' ').trim();
-            btn.textContent = text;
+            btn.textContent = [who, side || '', (line !== '' ? line : ''), fmtAmerican(am)]
+              .join(' ').replace(/\s+/g,' ').trim();
 
             btn.addEventListener('click', () => {
               pushLeg({
                 game, bookTitle: book.title,
-                key: actual,            // keep the actual market key returned by API
-                label,                   // pretty label from your desired key
+                key: actual,            // actual market key from API
+                label,                  // pretty label
                 side: side || who,
-                who: who,
-                line: line,
+                who, line,
                 priceDecimal: price
               });
             });
@@ -459,10 +449,10 @@
           });
 
           block.appendChild(btns);
-          wrap.appendChild(block);
+          grid.appendChild(block);
         });
 
-        details.appendChild(wrap);
+        details.appendChild(grid);
         marketsEl.appendChild(details);
       }
 
@@ -508,7 +498,7 @@
       }
       if (Number.isFinite(minLegOdds)) {
         const bad = slip.filter(l => Number(l.oddsAmerican) < Number(minLegOdds));
-        if (bad.length) errs.push(`At least one leg is below the minimum leg odds (${minLegOdds > 0 ? '+'+minLegOdds : minLegOdds}).`);
+        if (bad.length) errs.push(`At least one leg is below the minimum leg odds (${minLegOdds > 0 ? '+'+minLegOdds : minLegLegs}).`);
       }
       if (Number.isFinite(minTotalOdds)) {
         const combinedDecimal = slip.reduce((acc, l) => acc * (l.priceDecimal || 1), 1);

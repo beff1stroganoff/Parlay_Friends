@@ -329,15 +329,17 @@ app.get('/api/odds', async (req, res) => {
   if (!sport) return res.status(400).json({ error: 'Missing sport' });
   if (!ODDS_API_KEY) return res.status(500).json({ error: 'Missing ODDS_API_KEY on server' });
 
-  const baseMarkets = 'h2h,spreads,totals';
-  const propMarkets = [
-    'player_rush_yds',
-    'player_anytime_td',
-    'player_1st_td',      // some books return 'player_first_td' – our frontend handles both
-    'player_reception_yds', // some books return 'player_receiving_yds' – frontend handles both
-    'player_receptions',
-    'player_pass_yds'
-  ].join(',');
+ // server.js (inside /api/odds route)
+const baseMarkets = 'h2h,spreads,totals';
+const propMarkets = [
+  'player_rush_yds',
+  'player_anytime_td',
+  'player_1st_td',      // some books return 'player_first_td' – our frontend handles both
+  'player_reception_yds', // some books return 'player_receiving_yds' – frontend handles both
+  'player_receptions',
+  'player_pass_yds'
+].join(',');
+
 
   try {
     // Try with props first
