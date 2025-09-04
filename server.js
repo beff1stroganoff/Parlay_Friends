@@ -323,6 +323,7 @@ app.get('/api/user-leagues', async (req, res) => {
   }
 });
 
+
 // Odds API proxy (public)
 app.get('/api/odds', async (req, res) => {
   const { sport } = req.query;
@@ -331,51 +332,39 @@ app.get('/api/odds', async (req, res) => {
   const ODDS_API_KEY = process.env.ODDS_API_KEY;
   if (!ODDS_API_KEY) return res.status(500).json({ error: 'Missing ODDS_API_KEY on server' });
 
-  // Core + desired props (canonical keys The Odds API uses most consistently)
+  // Core markets + the ONE prop we’re testing
   const baseMarkets = 'h2h,spreads,totals';
-  const propMarkets = [
-    'player_rush_yds',
-    'player_anytime_td',
-    'player_first_td',       // canonical (UI also accepts player_1st_td)
-    'player_receiving_yds',  // canonical (UI also accepts player_reception_yds)
-    'player_receptions',
-    'player_pass_yds'
-  ].join(',');
+  const testProp = 'player_pass_yds';
 
-  // Many props show up only at certain books; limit to books that typically carry props.
-  const bookmakers = 'draftkings,fanduel,betmgm,caesars,pointsbetus';
+  // Start with FanDuel (you know they have props for DAL game)
+  const bookmakers = 'fanduel,draftkings,betmgm,caesars,pointsbetus';
 
-  // helper to see if any game actually contains a player_ market
-  const hasProps = (arr) => Array.isArray(arr) && arr.some(g =>
+  // helper: did we get any player_ markets back?
+  const hasPassYds = (arr) => Array.isArray(arr) && arr.some(g =>
     Array.isArray(g.bookmakers) && g.bookmakers.some(b =>
-      Array.isArray(b.markets) && b.markets.some(m => String(m.key || '').startsWith('player_')
-    ))
+      Array.isArray(b.markets) && b.markets.some(m => m.key === testProp)
+    )
   );
 
   try {
-    // 1) Ask for core + props from prop-friendly bookmakers
-    const withProps = await axios.get(`https://api.the-odds-api.com/v4/sports/${sport}/odds`, {
+    // 1) Ask for FanDuel (and a few others) with the one prop + core
+    const withPass = await axios.get(`https://api.the-odds-api.com/v4/sports/${sport}/odds`, {
       params: {
         apiKey: ODDS_API_KEY,
         regions: 'us',
-        bookmakers,
-        markets: `${baseMarkets},${propMarkets}`,
+        bookmakers,                      // prioritize books likely to carry props
+        markets: `${baseMarkets},${testProp}`,
         oddsFormat: 'decimal'
       },
       timeout: 15000
     });
 
-    if (hasProps(withProps.data)) {
-      return res.json(withProps.data);
-    }
-
-    // 2) If we didn’t get any player_ markets back, return what we have but
-    //    include a diagnostic header so we can see this easily in the Network tab.
-    res.set('X-Props-Present', 'false');
-    return res.json(withProps.data);
+    // Annotate for quick debugging in Network tab
+    res.set('X-Props-Present', String(hasPassYds(withPass.data)));
+    return res.json(withPass.data);
 
   } catch (err1) {
-    console.warn('Props request failed, falling back to core:', err1.response?.data || err1.message);
+    console.warn('Props+core request failed, falling back to core only:', err1.response?.data || err1.message);
 
     try {
       const coreOnly = await axios.get(`https://api.the-odds-api.com/v4/sports/${sport}/odds`, {
@@ -399,6 +388,7 @@ app.get('/api/odds', async (req, res) => {
     }
   }
 });
+
 
 
 // Submit parlay (requires auth)

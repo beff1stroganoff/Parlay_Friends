@@ -246,15 +246,12 @@
          .replace('Td', 'TD')
       );
     }
-    const PROP_KEY_GROUPS = [
-      ['player_rush_yds'],
-      ['player_anytime_td'],
-      ['player_1st_td', 'player_first_td'],
-      ['player_reception_yds', 'player_receiving_yds'],
-      ['player_receptions'],
-      ['player_pass_yds']
-    ];
-    const PROP_KEYS_FLAT = Array.from(new Set(PROP_KEY_GROUPS.flat()));
+    // Replace your PROP_KEY_GROUPS + PROP_KEYS_FLAT with this:
+const PROP_KEY_GROUPS = [
+  ['player_pass_yds']   // TEMP: only passing yards while we verify end-to-end
+];
+const PROP_KEYS_FLAT = Array.from(new Set(PROP_KEY_GROUPS.flat()));
+
 
     /* ---------- helper to push a leg ---------- */
     function pushLeg({game, bookTitle, key, label, side, who, line, priceDecimal}) {
