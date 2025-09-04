@@ -6,26 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link href="style.css" rel="stylesheet" />
   <style>
-    /* General buttons */
-button,
-.btn-submit,
-.btn-clear,
-.bet-line {
-  background-color: #f3f4f6; /* light gray */
-  color: #000;              /* black text */
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  padding: 8px 12px;
-  cursor: pointer;
-}
-
-button:hover,
-.btn-submit:hover,
-.btn-clear:hover,
-.bet-line:hover {
-  background-color: #e5e7eb; /* slightly darker gray on hover */
-}
-
     .grid { display: grid; gap: 16px; grid-template-columns: 1fr 360px; }
     @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
     .card { background:#fff; border-radius:14px; padding:16px; box-shadow:0 8px 20px rgba(0,0,0,.06); }
@@ -33,10 +13,19 @@ button:hover,
     .game { border:1px solid #eee; border-radius:12px; padding:12px; margin-bottom:12px; }
     .row { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
     .pill { display:inline-block; padding:6px 10px; border-radius:999px; background:#f3f4f6; margin-right:6px; font-size:.85rem; }
-    .btn { border:1px solid #ddd; padding:8px 10px; border-radius:10px; background:#fafafa; cursor:pointer; }
-    .btn:hover { background:#f0f0f0; }
-    .btn-primary { background:#0ea5e9; color:#fff; border-color:#0ea5e9; }
-    .btn-primary:hover { filter:brightness(.95); }
+    /* High-contrast buttons */
+    button, .btn, .btn-primary, .bet-line {
+      background-color: #f3f4f6;
+      color: #000;
+      border: 1px solid #cfcfcf;
+      border-radius: 10px;
+      padding: 8px 10px;
+      cursor: pointer;
+    }
+    button:hover, .btn:hover, .btn-primary:hover, .bet-line:hover {
+      background-color: #e5e7eb;
+    }
+    .btn-primary { background:#0ea5e9; color:#000; border-color:#0ea5e9; } /* keep black text */
     .danger { color:#b91c1c; }
     .success { color:#065f46; }
     .warn { color:#92400e; }
@@ -45,6 +34,16 @@ button:hover,
     .nowrap { white-space:nowrap; }
     .rules { background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:10px; margin-top:10px; }
     .errors { background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; padding:10px; margin-top:10px; }
+
+    /* Props UI */
+    details.props { border:1px solid #eee; border-radius:10px; padding:8px; background:#fafafa; }
+    details.props summary { cursor:pointer; list-style:none; user-select:none; }
+    details.props summary::-webkit-details-marker { display:none; }
+    .props-grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:8px; }
+    @media (max-width:700px){ .props-grid { grid-template-columns:1fr; } }
+    .prop-block { border:1px solid #e5e7eb; background:#fff; border-radius:10px; padding:8px; }
+    .prop-title { font-weight:600; font-size:.9rem; margin-bottom:6px; color:#111; }
+    .prop-buttons { display:flex; flex-wrap:wrap; gap:6px; }
   </style>
 </head>
 <body>
@@ -68,7 +67,7 @@ button:hover,
             <span class="pill">Moneyline</span>
             <span class="pill">Spread</span>
             <span class="pill">Total</span>
-            <span class="pill">Player Props (when available)</span>
+            <span class="pill">Player Props</span>
           </div>
           <div class="muted">Data from The Odds API</div>
         </div>
@@ -102,7 +101,7 @@ button:hover,
   </div>
 
   <script>
-    // ===== small on-page debug helper =====
+    /* ---------- Debug helper ---------- */
     function showError(msg) {
       const box = document.getElementById('odds-container') || document.body;
       const div = document.createElement('div');
@@ -115,13 +114,13 @@ button:hover,
       div.textContent = '⚠️ ' + msg;
       box.prepend(div);
     }
-  
-    // ===== URL / CONTEXT =====
+
+    /* ---------- URL / context ---------- */
     const q = new URLSearchParams(location.search);
     const leagueId = q.get('leagueId');
     const week = Number(q.get('week') || 1);
-  
-    // ===== UTILS =====
+
+    /* ---------- Odds conversions ---------- */
     function toAmerican(decimal) {
       if (!decimal || decimal <= 1) return -10000;
       return decimal >= 2 ? Math.round((decimal - 1) * 100)
@@ -133,16 +132,16 @@ button:hover,
       return n >= 0 ? 1 + n / 100 : 1 + 100 / Math.abs(n);
     }
     function fmtAmerican(n) { return n > 0 ? `+${n}` : `${n}`; }
-  
-    // ===== STATE =====
+
+    /* ---------- State ---------- */
     let slip = [];
     let leagueSettings = null;
-  
+
     function renderSlip() {
       const el = document.getElementById('betslip');
       if (!el) { showError('Missing #betslip container'); return; }
       el.innerHTML = '';
-  
+
       if (slip.length === 0) {
         el.innerHTML = '<div class="muted">No legs yet. Click a price to add a leg.</div>';
       } else {
@@ -151,7 +150,7 @@ button:hover,
           row.className = 'betslip-item';
           row.innerHTML = `
             <div>
-              <div><strong>${leg.team}</strong> <span class="muted">(${leg.market}${leg.line !== undefined ? ' ' + leg.line : ''})</span></div>
+              <div><strong>${leg.team}</strong> <span class="muted">(${leg.marketLabel}${leg.line !== undefined ? ' ' + leg.line : ''})</span></div>
               <div class="muted">${leg.book} • ${leg.side}</div>
             </div>
             <div class="nowrap"><strong>${fmtAmerican(leg.oddsAmerican)}</strong> <button class="btn" data-remove="${idx}" type="button">✕</button></div>
@@ -159,7 +158,7 @@ button:hover,
           el.appendChild(row);
         });
       }
-  
+
       const combined = slip.reduce((acc, l) => acc * (l.priceDecimal || 1), 1);
       const cd = document.getElementById('combinedDecimal');
       const ca = document.getElementById('combinedAmerican');
@@ -167,7 +166,7 @@ button:hover,
         cd.textContent = combined.toFixed(3);
         ca.textContent = fmtAmerican(toAmerican(combined));
       }
-  
+
       el.querySelectorAll('[data-remove]').forEach(btn => {
         btn.addEventListener('click', e => {
           const i = Number(e.currentTarget.getAttribute('data-remove'));
@@ -177,15 +176,15 @@ button:hover,
         });
       });
     }
-  
+
     function renderValidation() {
       const box = document.getElementById('validationErrors');
       if (!box) return;
       if (!leagueSettings) { box.style.display = 'none'; box.innerHTML = ''; return; }
-  
+
       const msgs = [];
       const { numLegs, minLegOdds, minTotalOdds } = leagueSettings;
-  
+
       if (Number.isFinite(numLegs) && slip.length !== Number(numLegs)) {
         msgs.push(`Your parlay must have exactly ${numLegs} leg(s). You currently have ${slip.length}.`);
       }
@@ -201,7 +200,7 @@ button:hover,
           msgs.push(`Your total parlay odds ${fmtAmerican(combinedAm)} are below the minimum required +${minTotalOdds}.`);
         }
       }
-  
+
       if (msgs.length) {
         box.style.display = '';
         box.innerHTML = `<div class="warn"><strong>Fix these before submitting:</strong></div><ul style="margin:8px 0 0 16px">${msgs.map(e => `<li>${e}</li>`).join('')}</ul>`;
@@ -210,32 +209,267 @@ button:hover,
         box.innerHTML = '';
       }
     }
-  
+
+    document.getElementById('clearSlip').addEventListener('click', () => {
+      slip = [];
+      renderSlip();
+      renderValidation();
+    });
+
+    /* ---------- League rules ---------- */
     async function loadLeagueRules() {
       const rulesEl = document.getElementById('rules');
       try {
         const res = await fetch(`/league/${leagueId}`);
         const league = await res.json();
         if (!res.ok) throw new Error(league?.error || 'Failed to load league');
-  
+
         leagueSettings = league.settings || {};
         const { numLegs, minLegOdds, minTotalOdds, leagueType } = leagueSettings;
-  
-        if (rulesEl) {
-          rulesEl.innerHTML = `
-            <div><strong>Rules</strong></div>
-            <div>Format: <strong>${leagueType}</strong></div>
-            <div>Required legs: <strong>${numLegs}</strong></div>
-            <div>Min leg odds: <strong>${minLegOdds > 0 ? '+' + minLegOdds : minLegOdds}</strong></div>
-            <div>Min total parlay odds: <strong>+${minTotalOdds}</strong></div>
-          `;
-        }
+
+        rulesEl.innerHTML = `
+          <div><strong>Rules</strong></div>
+          <div>Format: <strong>${leagueType}</strong></div>
+          <div>Required legs: <strong>${numLegs}</strong></div>
+          <div>Min leg odds: <strong>${minLegOdds > 0 ? '+' + minLegOdds : minLegOdds}</strong></div>
+          <div>Min total parlay odds: <strong>+${minTotalOdds}</strong></div>
+        `;
       } catch (e) {
-        console.error(e);
-        if (rulesEl) rulesEl.innerHTML = '<span class="warn">Could not load league rules. Submission will be blocked.</span>';
+        console.error('League rules error:', e);
+        rulesEl.innerHTML = '<span class="warn">Could not load league rules. Submission will be blocked.</span>';
       }
     }
-  
+
+    /* ---------- Pretty labels & key aliases ---------- */
+    function titleCase(s) { return s.replace(/\b(\w)/g, c => c.toUpperCase()); }
+    function prettyKey(k) {
+      return titleCase(
+        k.replace(/^player_/, '')
+         .replace(/_/g, ' ')
+         .replace('Yds', 'Yds')
+         .replace('Td', 'TD')
+      );
+    }
+    // Desired markets and acceptable aliases per your list
+    const PROP_KEY_GROUPS = [
+      ['player_rush_yds'],
+      ['player_anytime_td'],
+      ['player_1st_td', 'player_first_td'],
+      ['player_reception_yds', 'player_receiving_yds'], // allow either spelling
+      ['player_receptions'],
+      ['player_pass_yds']
+    ];
+
+    /* ---------- Render a game ---------- */
+    function pushLeg({game, bookTitle, key, label, side, who, line, priceDecimal}) {
+      const am = toAmerican(priceDecimal);
+      slip.push({
+        gameId: game.id,
+        market: key,
+        marketLabel: label,
+        side: side || who,
+        team: who,                // store player name in 'team' field to fit schema
+        line: (line !== '' && line !== undefined) ? Number(line) : undefined,
+        priceDecimal,
+        oddsAmerican: am,
+        book: bookTitle
+      });
+      renderSlip();
+      renderValidation();
+    }
+
+    function renderGame(game, container) {
+      const div = document.createElement('div');
+      div.className = 'game';
+
+      const home = game?.home_team || 'Home';
+      const away = game?.away_team || 'Away';
+      const commence = game?.commence_time ? new Date(game.commence_time).toLocaleString() : 'TBD';
+
+      div.innerHTML = `
+        <div class="row">
+          <div>
+            <div><strong>${away}</strong> @ <strong>${home}</strong></div>
+            <div class="muted">${commence}</div>
+          </div>
+          <div class="muted">Game ID: ${game.id || 'n/a'}</div>
+        </div>
+        <div class="hr"></div>
+        <div class="markets"></div>
+      `;
+
+      const book = (game.bookmakers && game.bookmakers[0]) || null;
+      const marketsEl = div.querySelector('.markets');
+
+      if (!book || !Array.isArray(book.markets)) {
+        marketsEl.innerHTML = '<div class="muted">No markets available for this game.</div>';
+        container.appendChild(div);
+        return;
+      }
+
+      // index markets by key
+      const mIndex = {};
+      book.markets.forEach(m => { mIndex[m.key] = m; });
+
+      /* --- Core markets --- */
+      // Moneyline (h2h)
+      if (mIndex.h2h && Array.isArray(mIndex.h2h.outcomes)) {
+        const ml = document.createElement('div');
+        ml.innerHTML = `<div style="margin:6px 0"><strong>${book.title}</strong> • Moneyline</div>`;
+        mIndex.h2h.outcomes.forEach(oc => {
+          const price = Number(oc.price);
+          const btn = document.createElement('button');
+          btn.className = 'btn';
+          btn.type = 'button';
+          btn.textContent = `${oc.name} ${fmtAmerican(toAmerican(price))}`;
+          btn.addEventListener('click', () => {
+            pushLeg({
+              game, bookTitle: book.title, key: 'moneyline', label: 'Moneyline',
+              side: oc.name, who: oc.name, line: undefined, priceDecimal: price
+            });
+          });
+          ml.appendChild(btn);
+        });
+        marketsEl.appendChild(ml);
+      }
+
+      // Spread
+      if (mIndex.spreads && Array.isArray(mIndex.spreads.outcomes)) {
+        const sp = document.createElement('div');
+        sp.innerHTML = `<div style="margin:6px 0"><strong>${book.title}</strong> • Spread</div>`;
+        mIndex.spreads.outcomes.forEach(oc => {
+          const price = Number(oc.price);
+          const line = oc.point;
+          const btn = document.createElement('button');
+          btn.className = 'btn';
+          btn.type = 'button';
+          btn.textContent = `${oc.name} ${line > 0 ? '+'+line : line} ${fmtAmerican(toAmerican(price))}`;
+          btn.addEventListener('click', () => {
+            pushLeg({
+              game, bookTitle: book.title, key: 'spread', label: 'Spread',
+              side: oc.name, who: oc.name, line, priceDecimal: price
+            });
+          });
+          sp.appendChild(btn);
+        });
+        marketsEl.appendChild(sp);
+      }
+
+      // Totals
+      if (mIndex.totals && Array.isArray(mIndex.totals.outcomes)) {
+        const tot = document.createElement('div');
+        tot.innerHTML = `<div style="margin:6px 0"><strong>${book.title}</strong> • Total</div>`;
+        mIndex.totals.outcomes.forEach(oc => {
+          const price = Number(oc.price);
+          const line = oc.point;
+          const label = oc.name?.toUpperCase() || 'TOTAL';
+          const btn = document.createElement('button');
+          btn.className = 'btn';
+          btn.type = 'button';
+          btn.textContent = `${label} ${line} ${fmtAmerican(toAmerican(price))}`;
+          btn.addEventListener('click', () => {
+            pushLeg({
+              game, bookTitle: book.title, key: 'total', label: 'Total',
+              side: label, who: label, line, priceDecimal: price
+            });
+          });
+          tot.appendChild(btn);
+        });
+        marketsEl.appendChild(tot);
+      }
+
+      /* --- Player Props (your exact list, with key aliases) --- */
+      // Build a map of which of your desired keys are present
+      const presentPropKeys = [];
+      PROP_KEY_GROUPS.forEach(group => {
+        const found = group.find(k => mIndex[k]);
+        if (found) presentPropKeys.push({ want: group[0], actual: found });
+      });
+
+      if (presentPropKeys.length) {
+        const details = document.createElement('details');
+        details.className = 'props';
+        details.open = false; // collapsed by default
+        const summary = document.createElement('summary');
+        summary.innerHTML = `<strong>Player Props</strong> <span class="muted">(tap to expand)</span>`;
+        details.appendChild(summary);
+
+        const wrap = document.createElement('div');
+        wrap.className = 'props-grid';
+
+        presentPropKeys.forEach(({want, actual}) => {
+          const market = mIndex[actual];
+          if (!market || !Array.isArray(market.outcomes) || !market.outcomes.length) return;
+
+          const block = document.createElement('div');
+          block.className = 'prop-block';
+
+          const label = prettyKey(want); // pretty print based on your desired key
+          const title = document.createElement('div');
+          title.className = 'prop-title';
+          title.textContent = label;
+          block.appendChild(title);
+
+          const btns = document.createElement('div');
+          btns.className = 'prop-buttons';
+
+          market.outcomes.forEach(oc => {
+            const price = Number(oc.price);
+            if (!Number.isFinite(price)) return;
+
+            // Build a robust label:
+            // - "description" or "participant" often holds player name
+            // - name may include "Over/Under" or player for anytime/first TD
+            const who = oc.description || oc.participant || oc.player || oc.name || 'Player';
+            const nameUpper = String(oc.name || '').toUpperCase();
+            const side =
+              nameUpper.includes('OVER')  ? 'Over'  :
+              nameUpper.includes('UNDER') ? 'Under' :
+              (want.includes('anytime_td') || want.includes('1st_td')) ? '' : oc.name || '';
+
+            const line = (oc.point !== undefined && oc.point !== null) ? oc.point : '';
+
+            const btn = document.createElement('button');
+            btn.className = 'btn';
+            btn.type = 'button';
+            const am = toAmerican(price);
+
+            // Compose compact button text
+            const text = [
+              who,
+              side ? side : '',
+              (line !== '' ? line : ''),
+              fmtAmerican(am)
+            ].join(' ').replace(/\s+/g,' ').trim();
+            btn.textContent = text;
+
+            btn.addEventListener('click', () => {
+              pushLeg({
+                game, bookTitle: book.title,
+                key: actual,            // keep the actual market key returned by API
+                label,                   // pretty label from your desired key
+                side: side || who,
+                who: who,
+                line: line,
+                priceDecimal: price
+              });
+            });
+
+            btns.appendChild(btn);
+          });
+
+          block.appendChild(btns);
+          wrap.appendChild(block);
+        });
+
+        details.appendChild(wrap);
+        marketsEl.appendChild(details);
+      }
+
+      container.appendChild(div);
+    }
+
+    /* ---------- Fetch NFL odds ---------- */
     async function loadNFL() {
       const container = document.getElementById('odds-container');
       if (!container) { showError('Missing #odds-container'); return; }
@@ -248,131 +482,27 @@ button:hover,
           return;
         }
         const data = await res.json();
-  
+
         if (!Array.isArray(data) || data.length === 0) {
           container.innerHTML = '<div class="muted">No NFL odds available.</div>';
           return;
         }
-  
+
         container.innerHTML = '';
-        data.forEach(game => {
-          const div = document.createElement('div');
-          div.className = 'game';
-  
-          const home = game?.home_team || 'Home';
-          const away = game?.away_team || 'Away';
-          const commence = game?.commence_time ? new Date(game.commence_time).toLocaleString() : 'TBD';
-  
-          div.innerHTML = `
-            <div class="row">
-              <div>
-                <div><strong>${away}</strong> @ <strong>${home}</strong></div>
-                <div class="muted">${commence}</div>
-              </div>
-              <div class="muted">Game ID: ${game.id || 'n/a'}</div>
-            </div>
-            <div class="hr"></div>
-            <div class="markets"></div>
-          `;
-  
-          const book = (game.bookmakers && game.bookmakers[0]) || null;
-          const marketsEl = div.querySelector('.markets');
-  
-          if (!book || !Array.isArray(book.markets)) {
-            marketsEl.innerHTML = '<div class="muted">No markets available for this game.</div>';
-          } else {
-            const mIndex = {};
-            book.markets.forEach(m => { mIndex[m.key] = m; });
-  
-            // Moneyline
-            if (mIndex.h2h && Array.isArray(mIndex.h2h.outcomes)) {
-              const ml = document.createElement('div');
-              ml.innerHTML = `<div style="margin:6px 0"><strong>${book.title}</strong> • Moneyline</div>`;
-              mIndex.h2h.outcomes.forEach(oc => {
-                const price = Number(oc.price);
-                const am = toAmerican(price);
-                const btn = document.createElement('button');
-                btn.className = 'btn';
-                btn.type = 'button';
-                btn.textContent = `${oc.name} ${fmtAmerican(am)}`;
-                btn.addEventListener('click', () => {
-                  slip.push({
-                    gameId: game.id, market: 'moneyline', side: oc.name,
-                    team: oc.name, priceDecimal: price, oddsAmerican: am, book: book.title
-                  });
-                  renderSlip();
-                  renderValidation();
-                });
-                ml.appendChild(btn);
-              });
-              marketsEl.appendChild(ml);
-            }
-  
-            // Spread
-            if (mIndex.spreads && Array.isArray(mIndex.spreads.outcomes)) {
-              const sp = document.createElement('div');
-              sp.innerHTML = `<div style="margin:6px 0"><strong>${book.title}</strong> • Spread</div>`;
-              mIndex.spreads.outcomes.forEach(oc => {
-                const price = Number(oc.price);
-                const am = toAmerican(price);
-                const line = oc.point;
-                const btn = document.createElement('button');
-                btn.className = 'btn';
-                btn.type = 'button';
-                btn.textContent = `${oc.name} ${line > 0 ? '+'+line : line} ${fmtAmerican(am)}`;
-                btn.addEventListener('click', () => {
-                  slip.push({
-                    gameId: game.id, market: 'spread', side: oc.name,
-                    team: oc.name, line, priceDecimal: price, oddsAmerican: am, book: book.title
-                  });
-                  renderSlip();
-                  renderValidation();
-                });
-                sp.appendChild(btn);
-              });
-              marketsEl.appendChild(sp);
-            }
-  
-            // Totals
-            if (mIndex.totals && Array.isArray(mIndex.totals.outcomes)) {
-              const tot = document.createElement('div');
-              tot.innerHTML = `<div style="margin:6px 0"><strong>${book.title}</strong> • Total</div>`;
-              mIndex.totals.outcomes.forEach(oc => {
-                const price = Number(oc.price);
-                const am = toAmerican(price);
-                const line = oc.point;
-                const label = oc.name?.toUpperCase() || 'TOTAL';
-                const btn = document.createElement('button');
-                btn.className = 'btn';
-                btn.type = 'button';
-                btn.textContent = `${label} ${line} ${fmtAmerican(am)}`;
-                btn.addEventListener('click', () => {
-                  slip.push({
-                    gameId: game.id, market: 'total', side: label,
-                    team: label, line, priceDecimal: price, oddsAmerican: am, book: book.title
-                  });
-                  renderSlip();
-                  renderValidation();
-                });
-                tot.appendChild(btn);
-              });
-              marketsEl.appendChild(tot);
-            }
-          }
-  
-          container.appendChild(div);
-        });
+        data.forEach(game => renderGame(game, container));
       } catch (e) {
         console.error(e);
         showError('Unexpected error loading NFL odds (see console).');
         container.innerHTML = '<div class="danger">Failed to load NFL odds.</div>';
       }
     }
-  
+
+    /* ---------- Submit (with validation) ---------- */
     function validateSlip() {
       if (!leagueSettings) return ['League rules not loaded. Please wait and try again.'];
       const errs = [];
       const { numLegs, minLegOdds, minTotalOdds } = leagueSettings;
+
       if (Number.isFinite(numLegs) && slip.length !== Number(numLegs)) {
         errs.push(`Your parlay must have exactly ${numLegs} leg(s). You currently have ${slip.length}.`);
       }
@@ -390,30 +520,28 @@ button:hover,
       }
       return errs;
     }
-  
+
     async function submitParlay() {
       const token = localStorage.getItem('token');
       if (!token) { alert('Please log in to submit a parlay.'); return; }
       if (!leagueId || !week) { alert('Missing league or week.'); return; }
       if (slip.length === 0) { alert('Add at least one leg.'); return; }
-  
+
       const errs = validateSlip();
       const errBox = document.getElementById('validationErrors');
       if (errs.length) {
-        if (errBox) {
-          errBox.style.display = '';
-          errBox.innerHTML = `<div class="warn"><strong>Fix these before submitting:</strong></div><ul style="margin:8px 0 0 16px">${errs.map(e => `<li>${e}</li>`).join('')}</ul>`;
-        }
+        errBox.style.display = '';
+        errBox.innerHTML = `<div class="warn"><strong>Fix these before submitting:</strong></div><ul style="margin:8px 0 0 16px">${errs.map(e => `<li>${e}</li>`).join('')}</ul>`;
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
-      } else if (errBox) {
+      } else {
         errBox.style.display = 'none';
         errBox.innerHTML = '';
       }
-  
+
       const picks = slip.map(l => ({ team: l.team, type: l.market, odds: l.oddsAmerican }));
       const totalOdds = slip.reduce((acc, l) => acc * (l.priceDecimal || 1), 1);
-  
+
       try {
         const res = await fetch('/api/parlay/submit', {
           method: 'POST',
@@ -436,41 +564,23 @@ button:hover,
         alert('Network/server error submitting parlay.');
       }
     }
-  
+
+    document.getElementById('submitParlay').addEventListener('click', submitParlay);
+
+    /* ---------- Init ---------- */
     async function init() {
-      try {
-        // basic DOM presence checks
-        const contextEl = document.getElementById('context');
-        const backBtn = document.getElementById('backToLeague');
-        if (!contextEl || !backBtn) showError('Missing header UI elements.');
-  
-        if (!leagueId) {
-          alert('No leagueId provided. Returning to dashboard.');
-          location.href = 'dashboard.html';
-          return;
-        }
-        if (contextEl) contextEl.textContent = `League: ${leagueId} • Week: ${week}`;
-        if (backBtn) backBtn.href = `league_home.html?leagueId=${encodeURIComponent(leagueId)}`;
-  
-        // wire buttons after DOM exists
-        const clearBtn = document.getElementById('clearSlip');
-        const submitBtn = document.getElementById('submitParlay');
-        if (clearBtn) clearBtn.addEventListener('click', () => { slip = []; renderSlip(); renderValidation(); });
-        if (submitBtn) submitBtn.addEventListener('click', submitParlay);
-  
-        await loadLeagueRules();    // loads & shows rules; needed for validation
-        await loadNFL();            // renders games
-        renderSlip();
-        renderValidation();
-      } catch (e) {
-        console.error('Init error:', e);
-        showError('Page initialization failed (see console).');
-      }
+      const contextEl = document.getElementById('context');
+      const backBtn = document.getElementById('backToLeague');
+      if (!leagueId) { alert('No leagueId provided. Returning to dashboard.'); location.href = 'dashboard.html'; return; }
+      if (contextEl) contextEl.textContent = `League: ${leagueId} • Week: ${week}`;
+      if (backBtn) backBtn.href = `league_home.html?leagueId=${encodeURIComponent(leagueId)}`;
+
+      await loadLeagueRules();
+      await loadNFL();
+      renderSlip();
+      renderValidation();
     }
-  
-    // Ensure DOM is ready before wiring anything
     document.addEventListener('DOMContentLoaded', init);
   </script>
-  
 </body>
 </html>
