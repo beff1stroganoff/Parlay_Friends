@@ -324,7 +324,7 @@ app.get('/api/user-leagues', async (req, res) => {
 });
 
 
-// Odds API proxy (public) – core + per-event player props (FanDuel only)
+// Odds API proxy (public) – core + per-event player props (FanDuel only) with caching & backoff
 app.get('/api/odds', async (req, res) => {
   const { sport } = req.query;
   if (!sport) return res.status(400).json({ error: 'Missing sport' });
@@ -332,84 +332,133 @@ app.get('/api/odds', async (req, res) => {
   const ODDS_API_KEY = process.env.ODDS_API_KEY;
   if (!ODDS_API_KEY) return res.status(500).json({ error: 'Missing ODDS_API_KEY on server' });
 
-  // Keep your defaults; still overridable via querystring
   const baseMarkets = req.query.baseMarkets || 'h2h,spreads,totals';
-  const testProp = 'player_pass_yds';
   const bookmakers = (req.query.bookmakers || 'fanduel').toLowerCase();
+  const regions = req.query.regions || 'us';
+  const oddsFormat = req.query.oddsFormat || 'decimal';
+  const TEST_PROP = 'player_pass_yds';
+
+  // --- simple in-memory cache for event props (2 minutes) ---
+  const CACHE_TTL_MS = 120000;
+  if (!global.__propsCache) global.__propsCache = new Map();
+  const propsCache = global.__propsCache;
+
+  const cacheKey = (eventId) => `${sport}:${bookmakers}:${eventId}:${TEST_PROP}`;
+  const cacheGet = (key) => {
+    const hit = propsCache.get(key);
+    if (hit && hit.expires > Date.now()) return hit.data;
+    if (hit) propsCache.delete(key);
+    return null;
+  };
+  const cacheSet = (key, data) => propsCache.set(key, { data, expires: Date.now() + CACHE_TTL_MS });
+
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  const hasPassYdsAnywhere = (arr) => Array.isArray(arr) && arr.some(g =>
+    Array.isArray(g.bookmakers) && g.bookmakers.some(b =>
+      Array.isArray(b.markets) && b.markets.some(m => m.key === TEST_PROP)
+    )
+  );
+
+  async function fetchPassYdsForEvent(eventId) {
+    // cache first
+    const key = cacheKey(eventId);
+    const cached = cacheGet(key);
+    if (cached) return cached;
+
+    try {
+      const r = await axios.get(`https://api.the-odds-api.com/v4/sports/${sport}/events/${eventId}/odds`, {
+        params: { apiKey: ODDS_API_KEY, regions, bookmakers, markets: TEST_PROP, oddsFormat },
+        timeout: 15000
+      });
+      // event endpoint returns an object with .bookmakers
+      const books = Array.isArray(r.data?.bookmakers) ? r.data.bookmakers : [];
+      cacheSet(key, books);
+      return books;
+    } catch (e) {
+      // if rate-limited, try to serve stale cache (if any), else return empty
+      if (e.response?.data?.error_code === 'EXCEEDED_FREQ_LIMIT') {
+        return cached || [];
+      }
+      return [];
+    }
+  }
 
   try {
-    // 1) Core markets (this endpoint does NOT support player_*)
-    const coreResp = await axios.get(`https://api.the-odds-api.com/v4/sports/${sport}/odds`, {
-      params: {
-        apiKey: ODDS_API_KEY,
-        regions: 'us',
-        bookmakers,
-        markets: baseMarkets,
-        oddsFormat: 'decimal'
-      },
+    // 1) Core list call (supports only h2h/spreads/totals)
+    const core = await axios.get(`https://api.the-odds-api.com/v4/sports/${sport}/odds`, {
+      params: { apiKey: ODDS_API_KEY, regions, bookmakers, markets: baseMarkets, oddsFormat },
       timeout: 15000
     });
 
-    const games = Array.isArray(coreResp.data) ? coreResp.data : [];
-    let propsCount = 0;
+    const games = Array.isArray(core.data) ? core.data : [];
 
-    // 2) For each game, fetch player_pass_yds from the event-level endpoint & merge
-    await Promise.all(
-      games.map(async (g) => {
-        if (!g?.id) return;
-        try {
-          const evResp = await axios.get(
-            `https://api.the-odds-api.com/v4/sports/${sport}/events/${g.id}/odds`,
-            {
-              params: {
-                apiKey: ODDS_API_KEY,
-                regions: 'us',
-                bookmakers,
-                markets: testProp,
-                oddsFormat: 'decimal'
-              },
-              timeout: 15000
-            }
-          );
+    // 2) Choose a small set of targets to avoid rate limiting
+    //    Prefer DAL–PHI if present; else a few upcoming games in next 72h
+    const isDALPHI = (g) => {
+      const a = (g.home_team || '').toLowerCase();
+      const b = (g.away_team || '').toLowerCase();
+      return (a.includes('cowboys') || b.includes('cowboys') || a.includes('eagles') || b.includes('eagles'));
+    };
+    const dalPhiGames = games.filter(isDALPHI);
 
-          const ev = evResp.data;
-          const evBook = Array.isArray(ev?.bookmakers)
-            ? ev.bookmakers.find(b => (b.key || '').toLowerCase() === bookmakers) || ev.bookmakers[0]
-            : null;
-
-          const propMarket = evBook?.markets?.find(m => m.key === testProp);
-          if (!propMarket) return;
-
-          propsCount++;
-
-          // Merge into the corresponding bookmaker on the core game
-          g.bookmakers = Array.isArray(g.bookmakers) ? g.bookmakers : [];
-          let coreBook = g.bookmakers.find(b => (b.key || '').toLowerCase() === (evBook.key || '').toLowerCase());
-          if (!coreBook) {
-            // If the core call didn't have this book for some reason, add it
-            coreBook = { key: evBook.key, title: evBook.title, markets: [] };
-            g.bookmakers.push(coreBook);
-          }
-
-          coreBook.markets = Array.isArray(coreBook.markets) ? coreBook.markets.filter(m => m.key !== testProp) : [];
-          coreBook.markets.push(propMarket);
-        } catch (err) {
-          console.warn('Event props fetch failed for', g.id, err.response?.data || err.message);
-        }
+    const now = Date.now();
+    const horizon = now + 72 * 3600 * 1000;
+    const upcoming = games
+      .filter(g => {
+        const t = Date.parse(g.commence_time);
+        return Number.isFinite(t) && t >= now && t <= horizon;
       })
-    );
+      .sort((a, b) => Date.parse(a.commence_time) - Date.parse(b.commence_time));
+
+    const MAX_EVENTS = 4;
+    const targets = (dalPhiGames.length ? dalPhiGames : upcoming).slice(0, MAX_EVENTS);
+
+    // 3) Sequentially fetch props for targets with a tiny delay to respect rate limits
+    let propsFound = 0;
+    for (const g of targets) {
+      if (!g?.id) continue;
+      const propsBooks = await fetchPassYdsForEvent(g.id);
+      if (!propsBooks.length) { await sleep(300); continue; }
+
+      // Merge into the matching bookmaker object for this game
+      g.bookmakers = Array.isArray(g.bookmakers) ? g.bookmakers : [];
+      const byKey = new Map(g.bookmakers.map(b => [String(b.key || '').toLowerCase(), b]));
+
+      for (const bk of propsBooks) {
+        const key = String(bk.key || bk.bookmaker?.key || '').toLowerCase();
+        if (!key) continue;
+        const title = bk.title || bk.bookmaker?.title || key;
+
+        let coreBk = byKey.get(key);
+        if (!coreBk) {
+          coreBk = { key, title, markets: [] };
+          g.bookmakers.push(coreBk);
+          byKey.set(key, coreBk);
+        }
+        coreBk.markets = Array.isArray(coreBk.markets) ? coreBk.markets.filter(m => m.key !== TEST_PROP) : [];
+        const propMarket = Array.isArray(bk.markets) ? bk.markets.find(m => m.key === TEST_PROP) : null;
+        if (propMarket) {
+          coreBk.markets.push({ key: TEST_PROP, outcomes: propMarket.outcomes || [], last_update: propMarket.last_update || bk.last_update });
+          propsFound++;
+        }
+      }
+
+      await sleep(300); // small backoff between event calls
+    }
 
     res.set('Access-Control-Expose-Headers', 'X-Props-Present');
-    res.set('X-Props-Present', String(propsCount > 0));
+    res.set('X-Props-Present', String(propsFound > 0));
     return res.json(games);
-  } catch (err1) {
-    console.warn('Core odds fetch failed:', err1.response?.data || err1.message);
-    return res.status(500).json({
-      error: 'Failed to fetch odds',
-      details: err1.response?.data || err1.message
-    });
+
+  } catch (err) {
+    console.error('Error fetching odds:', err.response?.data || err.message);
+    res.set('Access-Control-Expose-Headers', 'X-Props-Present');
+    res.set('X-Props-Present', 'false');
+    return res.status(500).json({ error: 'Failed to fetch odds', details: err.response?.data || err.message });
   }
 });
+
 
 
 
