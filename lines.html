@@ -6,6 +6,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link href="style.css" rel="stylesheet" />
   <style>
+    /* General buttons */
+button,
+.btn-submit,
+.btn-clear,
+.bet-line {
+  background-color: #f3f4f6; /* light gray */
+  color: #000;              /* black text */
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+button:hover,
+.btn-submit:hover,
+.btn-clear:hover,
+.bet-line:hover {
+  background-color: #e5e7eb; /* slightly darker gray on hover */
+}
+
     .grid { display: grid; gap: 16px; grid-template-columns: 1fr 360px; }
     @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
     .card { background:#fff; border-radius:14px; padding:16px; box-shadow:0 8px 20px rgba(0,0,0,.06); }
