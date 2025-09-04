@@ -251,13 +251,15 @@
     }
     // Desired markets and acceptable aliases per your list
     const PROP_KEY_GROUPS = [
-      ['player_rush_yds'],
-      ['player_anytime_td'],
-      ['player_1st_td', 'player_first_td'],
-      ['player_reception_yds', 'player_receiving_yds'], // allow either spelling
-      ['player_receptions'],
-      ['player_pass_yds']
-    ];
+  ['player_rush_yds'],
+  ['player_anytime_td'],
+  ['player_1st_td', 'player_first_td'],       // keep alias here for front-end rendering
+  ['player_reception_yds', 'player_receiving_yds'],
+  ['player_receptions'],
+  ['player_pass_yds']
+];
+const PROP_KEYS_FLAT = Array.from(new Set(PROP_KEY_GROUPS.flat()));
+
 
     /* ---------- helper to push a leg ---------- */
     function pushLeg({game, bookTitle, key, label, side, who, line, priceDecimal}) {
@@ -301,11 +303,15 @@
       const book = (game.bookmakers && game.bookmakers[0]) || null;
       const marketsEl = div.querySelector('.markets');
 
-      if (!book || !Array.isArray(book.markets)) {
-        marketsEl.innerHTML = '<div class="muted">No markets available for this game.</div>';
-        container.appendChild(div);
-        return;
-      }
+      // pick a bookmaker that actually has our props, else fallback to the first
+let book = null;
+if (Array.isArray(game.bookmakers) && game.bookmakers.length) {
+  book =
+    game.bookmakers.find(b =>
+      Array.isArray(b.markets) &&
+      b.markets.some(m => PROP_KEYS_FLAT.includes(m.key))
+    ) || game.bookmakers[0];
+}
 
       // index markets by key
       const mIndex = {};
