@@ -332,68 +332,109 @@ app.get('/api/odds', async (req, res) => {
   const ODDS_API_KEY = process.env.ODDS_API_KEY;
   if (!ODDS_API_KEY) return res.status(500).json({ error: 'Missing ODDS_API_KEY on server' });
 
-  // Core markets + the ONE prop we’re testing
-const baseMarkets = req.query.baseMarkets || 'h2h,spreads,totals';
-const testProp = 'player_pass_yds';
-// Allow caller to override full markets list, else default to base + prop
-const markets = req.query.markets || `${baseMarkets},${testProp}`;
+  // Core markets only on the list endpoint
+  const baseMarkets = req.query.baseMarkets || 'h2h,spreads,totals';
+  // FanDuel only per your request (allow override via query)
+  const bookmakers = (req.query.bookmakers || 'fanduel').toLowerCase();
+  const regions = req.query.regions || 'us';
+  const oddsFormat = req.query.oddsFormat || 'decimal';
 
-// Use a broader default set of books; caller can still override
-const bookmakers = req.query.bookmakers || 'fanduel,draftkings,betmgm,caesars,pointsbetus';
+  // fetch props per event (supported endpoint)
+  async function fetchPassYdsForEvent(eventId) {
+    try {
+      const r = await axios.get(`https://api.the-odds-api.com/v4/sports/${sport}/events/${eventId}/odds`, {
+        params: {
+          apiKey: ODDS_API_KEY,
+          regions,
+          bookmakers,
+          markets: 'player_pass_yds',
+          oddsFormat
+        },
+        timeout: 15000
+      });
+      return Array.isArray(r.data) ? r.data : [];
+    } catch {
+      return []; // silently skip if no props yet
+    }
+  }
 
-
-  // helper: did we get any player_ markets back?
   const hasPassYds = (arr) => Array.isArray(arr) && arr.some(g =>
     Array.isArray(g.bookmakers) && g.bookmakers.some(b =>
-      Array.isArray(b.markets) && b.markets.some(m => m.key === testProp)
+      Array.isArray(b.markets) && b.markets.some(m => m.key === 'player_pass_yds')
     )
   );
 
   try {
-    // 1) Ask for FanDuel (and a few others) with the one prop + core
-    const withPass = await axios.get(`https://api.the-odds-api.com/v4/sports/${sport}/odds`, {
+    // 1) Core list call (only markets supported here)
+    const core = await axios.get(`https://api.the-odds-api.com/v4/sports/${sport}/odds`, {
       params: {
         apiKey: ODDS_API_KEY,
-        regions: 'us',
-        bookmakers,
-        markets,
-        oddsFormat: 'decimal'
+        regions,
+        bookmakers,          // FanDuel only
+        markets: baseMarkets,
+        oddsFormat
       },
       timeout: 15000
     });
-    
 
-    // Annotate for quick debugging in Network tab
+    const games = Array.isArray(core.data) ? core.data : [];
+
+    // 2) For each game, fetch player_pass_yds via per-event endpoint and merge
+    const concurrency = 4;
+    const queue = [...games];
+    const workers = Array.from({ length: concurrency }, async () => {
+      while (queue.length) {
+        const game = queue.shift();
+        const eventId = game.id;
+        if (!eventId) continue;
+
+        const propsByBook = await fetchPassYdsForEvent(eventId);
+        if (!propsByBook.length) continue;
+
+        for (const propsBook of propsByBook) {
+          const bkKey = propsBook.bookmaker?.key || propsBook.key || 'fanduel';
+          const bkTitle = propsBook.bookmaker?.title || propsBook.title || 'FanDuel';
+
+          let targetBk = (game.bookmakers || []).find(b => b.key === bkKey);
+          if (!targetBk) {
+            targetBk = { key: bkKey, title: bkTitle, last_update: propsBook.last_update, markets: [] };
+            game.bookmakers = game.bookmakers || [];
+            game.bookmakers.push(targetBk);
+          }
+
+          targetBk.markets = targetBk.markets || [];
+          const existing = targetBk.markets.find(m => m.key === 'player_pass_yds');
+          const propMarket = propsBook.markets?.find(m => m.key === 'player_pass_yds');
+
+          if (existing) {
+            existing.outcomes = propMarket?.outcomes || existing.outcomes;
+            existing.last_update = propsBook.last_update || existing.last_update;
+          } else if (propMarket) {
+            targetBk.markets.push({
+              key: 'player_pass_yds',
+              outcomes: propMarket.outcomes || [],
+              last_update: propsBook.last_update || propMarket.last_update
+            });
+          }
+        }
+      }
+    });
+    await Promise.all(workers);
+
+    // 3) Expose header & respond
+    const propsPresent = hasPassYds(games);
     res.set('Access-Control-Expose-Headers', 'X-Props-Present');
-    res.set('X-Props-Present', String(hasPassYds(withPass.data)));
-    return res.json(withPass.data);
-    
+    res.set('X-Props-Present', String(propsPresent));
+    return res.json(games);
 
-  } catch (err1) {
-    console.warn('Props+core request failed, falling back to core only:', err1.response?.data || err1.message);
-
-    try {
-      const coreOnly = await axios.get(`https://api.the-odds-api.com/v4/sports/${sport}/odds`, {
-        params: {
-          apiKey: ODDS_API_KEY,
-          regions: 'us',
-          bookmakers,
-          markets: baseMarkets,
-          oddsFormat: 'decimal'
-        },
-        timeout: 15000
-      });
-      res.set('Access-Control-Expose-Headers', 'X-Props-Present');
-      res.set('X-Props-Present', 'false');
-      return res.json(coreOnly.data);
-      
-    } catch (err2) {
-      console.error('Error fetching odds:', err2.response?.data || err2.message);
-      return res.status(500).json({
-        error: 'Failed to fetch odds',
-        details: err2.response?.data || err2.message
-      });
-    }
+  } catch (err) {
+    console.error('Error fetching odds:', err.response?.data || err.message);
+    res.set('Access-Control-Expose-Headers', 'X-Props-Present');
+    res.set('X-Props-Present', 'false');
+    return res.status(500).json({
+      error: 'Failed to fetch odds',
+      details: err.response?.data || err.message
+    });
   }
 });
 
