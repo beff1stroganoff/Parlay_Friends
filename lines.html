@@ -306,11 +306,17 @@ details.props[open] summary::after { transform: rotate(180deg); }
          .replace('Td', 'TD')
       );
     }
-    // Replace your PROP_KEY_GROUPS + PROP_KEYS_FLAT with this:
+    // Show these markets if present (exact Odds API keys)
 const PROP_KEY_GROUPS = [
-  ['player_pass_yds']   // TEMP: only passing yards while we verify end-to-end
+  ['player_pass_yds'],
+  ['player_reception_yds'],
+  ['player_reception_tds'],
+  ['player_rush_yds'],
+  ['player_anytime_td'],
+  ['player_1st_td']
 ];
 const PROP_KEYS_FLAT = Array.from(new Set(PROP_KEY_GROUPS.flat()));
+
 
 
     /* ---------- helper to push a leg ---------- */
@@ -330,6 +336,46 @@ const PROP_KEYS_FLAT = Array.from(new Set(PROP_KEY_GROUPS.flat()));
       renderSlip();
       renderValidation();
     }
+
+
+    // Drop in smarter parsing for Over/Under vs. Yes/No
+    function normalizeLabel(key) {
+  const map = {
+    player_pass_yds: 'Passing Yards',
+    player_reception_yds: 'Reception Yards',
+    player_reception_tds: 'Reception TDs',
+    player_rush_yds: 'Rushing Yards',
+    player_anytime_td: 'Anytime TD Scorer',
+    player_1st_td: 'First TD Scorer'
+  };
+  return map[key] || prettyKey(key);
+}
+
+// Extract player name / side (Over|Under|Yes|No) / line / price robustly
+function parseOutcome(marketKey, oc) {
+  const name = (oc.name || '').toString();
+  const desc = (oc.description || '').toString();
+  const playerField = oc.player || oc.participant || '';
+
+  const isOU = (s) => /^over|under$/i.test(s);
+  const isYN = (s) => /^yes|no$/i.test(s);
+
+  let playerName = '';
+  let side = '';
+  if (marketKey === 'player_anytime_td' || marketKey === 'player_1st_td') {
+    // Usually one outcome per player ("Yes")
+    playerName = (!isYN(name) && name) || playerField || desc || 'Player';
+    side = (isYN(name) && name) || (isYN(desc) && desc) || 'Yes';
+  } else {
+    if (isOU(name)) { side = name; playerName = playerField || desc || 'Player'; }
+    else if (isOU(desc)) { side = desc; playerName = name || playerField || 'Player'; }
+    else { playerName = name || playerField || 'Player'; side = ''; }
+  }
+
+  const line = (oc.point !== undefined && oc.point !== null) ? oc.point : '';
+  const price = Number(oc.price);
+  return { playerName, side, line, price };
+}
 
     /* ---------- Render a game ---------- */
     function renderGame(game, container) {
@@ -440,80 +486,118 @@ const PROP_KEYS_FLAT = Array.from(new Set(PROP_KEY_GROUPS.flat()));
         marketsEl.appendChild(tot);
       }
 
-      /* --- Player Props (your exact list, with key aliases) --- */
-      const presentPropKeys = [];
-      PROP_KEY_GROUPS.forEach(group => {
-        const found = group.find(k => mIndex[k]);
-        if (found) presentPropKeys.push({ want: group[0], actual: found });
+     /* --- Player Props (multi-market) --- */
+const presentPropKeys = [];
+PROP_KEY_GROUPS.forEach(group => {
+  const found = group.find(k => mIndex[k]);
+  if (found) presentPropKeys.push({ want: group[0], actual: found });
+});
+
+if (presentPropKeys.length) {
+  const details = document.createElement('details');
+  details.className = 'props';
+  details.open = false;
+  const summary = document.createElement('summary');
+  summary.innerHTML = `<strong>Player Props</strong> <span class="muted">(tap to expand)</span>`;
+  details.appendChild(summary);
+
+  const grid = document.createElement('div');
+  grid.className = 'props-grid';
+
+  presentPropKeys.forEach(({ want, actual }) => {
+    const market = mIndex[actual];
+    if (!market || !Array.isArray(market.outcomes) || !market.outcomes.length) return;
+
+    const label = normalizeLabel(want);
+    const block = document.createElement('div');
+    block.className = 'prop-block';
+    const title = document.createElement('div');
+    title.className = 'prop-title';
+    title.textContent = label;
+    block.appendChild(title);
+
+    const btns = document.createElement('div');
+    btns.className = 'prop-buttons';
+
+    if (want === 'player_anytime_td' || want === 'player_1st_td') {
+      // One button per player ("Yes" price)
+      market.outcomes.forEach(oc => {
+        const { playerName, side, line, price } = parseOutcome(want, oc);
+        if (!Number.isFinite(price)) return;
+        const am = toAmerican(price);
+        const btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.type = 'button';
+        btn.textContent = `${playerName} ${fmtAmerican(am)}`;
+        btn.addEventListener('click', () => pushLeg({
+          game, bookTitle: book.title, key: want, label,
+          side: side || 'Yes', who: playerName, line, priceDecimal: price
+        }));
+        btns.appendChild(btn);
+      });
+    } else {
+      // Over/Under: group by player
+      const byPlayer = {};
+      market.outcomes.forEach(oc => {
+        const r = parseOutcome(want, oc);
+        if (!r.playerName) return;
+        const key = r.playerName;
+        byPlayer[key] = byPlayer[key] || { over: null, under: null, point: r.line };
+        if (/over/i.test(r.side)) byPlayer[key].over = r;
+        if (/under/i.test(r.side)) byPlayer[key].under = r;
+        if (r.line !== '') byPlayer[key].point = r.line;
       });
 
-      if (presentPropKeys.length) {
-        const details = document.createElement('details');
-        details.className = 'props';
-        details.open = false;
-        const summary = document.createElement('summary');
-        summary.innerHTML = `<strong>Player Props</strong> <span class="muted">(tap to expand)</span>`;
-        details.appendChild(summary);
+      Object.entries(byPlayer).forEach(([player, v]) => {
+        const point = (v.point !== '' && v.point !== undefined) ? `${v.point}` : '';
+        const row = document.createElement('div');
+        row.style.display = 'grid';
+        row.style.gridTemplateColumns = '1fr 1fr 1fr';
+        row.style.gap = '6px';
+        row.style.alignItems = 'center';
+        row.style.marginBottom = '6px';
+        row.innerHTML = `<div class="text-sm font-medium">${player}${point ? ` <span class="muted">(${point})</span>` : ''}</div>`;
 
-        const grid = document.createElement('div');
-        grid.className = 'props-grid';
+        const overBtn = document.createElement('button');
+        overBtn.className = 'btn';
+        overBtn.type = 'button';
+        if (v.over && Number.isFinite(v.over.price)) {
+          overBtn.textContent = `Over ${fmtAmerican(toAmerican(v.over.price))}`;
+          overBtn.addEventListener('click', () => pushLeg({
+            game, bookTitle: book.title, key: want, label,
+            side: 'Over', who: player, line: v.point, priceDecimal: v.over.price
+          }));
+        } else {
+          overBtn.disabled = true; overBtn.textContent = 'Over —';
+        }
 
-        presentPropKeys.forEach(({want, actual}) => {
-          const market = mIndex[actual];
-          if (!market || !Array.isArray(market.outcomes) || !market.outcomes.length) return;
+        const underBtn = document.createElement('button');
+        underBtn.className = 'btn';
+        underBtn.type = 'button';
+        if (v.under && Number.isFinite(v.under.price)) {
+          underBtn.textContent = `Under ${fmtAmerican(toAmerican(v.under.price))}`;
+          underBtn.addEventListener('click', () => pushLeg({
+            game, bookTitle: book.title, key: want, label,
+            side: 'Under', who: player, line: v.point, priceDecimal: v.under.price
+          }));
+        } else {
+          underBtn.disabled = true; underBtn.textContent = 'Under —';
+        }
 
-          const block = document.createElement('div');
-          block.className = 'prop-block';
+        row.appendChild(overBtn);
+        row.appendChild(underBtn);
+        btns.appendChild(row);
+      });
+    }
 
-          const label = prettyKey(want);
-          const title = document.createElement('div');
-          title.className = 'prop-title';
-          title.textContent = label;
-          block.appendChild(title);
+    block.appendChild(btns);
+    grid.appendChild(block);
+  });
 
-          const btns = document.createElement('div');
-          btns.className = 'prop-buttons';
+  details.appendChild(grid);
+  marketsEl.appendChild(details);
+}
 
-          market.outcomes.forEach(oc => {
-            const price = Number(oc.price);
-            if (!Number.isFinite(price)) return;
-
-            const who = oc.description || oc.participant || oc.player || oc.name || 'Player';
-            const nameUpper = String(oc.name || '').toUpperCase();
-            const side =
-              nameUpper.includes('OVER')  ? 'Over'  :
-              nameUpper.includes('UNDER') ? 'Under' :
-              (want.includes('anytime_td') || want.includes('1st_td')) ? '' : oc.name || '';
-            const line = (oc.point !== undefined && oc.point !== null) ? oc.point : '';
-
-            const btn = document.createElement('button');
-            btn.className = 'btn';
-            btn.type = 'button';
-            const am = toAmerican(price);
-            btn.textContent = [who, side || '', (line !== '' ? line : ''), fmtAmerican(am)]
-              .join(' ').replace(/\s+/g,' ').trim();
-
-            btn.addEventListener('click', () => {
-              pushLeg({
-                game, bookTitle: book.title,
-                key: actual,
-                label,
-                side: side || who,
-                who, line,
-                priceDecimal: price
-              });
-            });
-
-            btns.appendChild(btn);
-          });
-
-          block.appendChild(btns);
-          grid.appendChild(block);
-        });
-
-        details.appendChild(grid);
-        marketsEl.appendChild(details);
-      }
 
       container.appendChild(div);
     }

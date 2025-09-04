@@ -324,7 +324,7 @@ app.get('/api/user-leagues', async (req, res) => {
 });
 
 
-// Odds API proxy (public) – core + per-event player props (FanDuel only) with caching & backoff
+// Odds API proxy (public) – core + per-event NFL player props (FanDuel) with caching & backoff
 app.get('/api/odds', async (req, res) => {
   const { sport } = req.query;
   if (!sport) return res.status(400).json({ error: 'Missing sport' });
@@ -336,14 +336,24 @@ app.get('/api/odds', async (req, res) => {
   const bookmakers = (req.query.bookmakers || 'fanduel').toLowerCase();
   const regions = req.query.regions || 'us';
   const oddsFormat = req.query.oddsFormat || 'decimal';
-  const TEST_PROP = 'player_pass_yds';
+
+  // ✅ All six props you asked for (official keys)
+  const PROP_KEYS = [
+    'player_pass_yds',
+    'player_reception_tds',
+    'player_reception_yds',
+    'player_rush_yds',
+    'player_1st_td',
+    'player_anytime_td'
+  ]; // NFL props list + event endpoint requirement: the-odds-api docs. :contentReference[oaicite:1]{index=1}
+  const PROPS_QS = PROP_KEYS.join(',');
 
   // --- simple in-memory cache for event props (2 minutes) ---
   const CACHE_TTL_MS = 120000;
   if (!global.__propsCache) global.__propsCache = new Map();
   const propsCache = global.__propsCache;
 
-  const cacheKey = (eventId) => `${sport}:${bookmakers}:${eventId}:${TEST_PROP}`;
+  const cacheKey = (eventId) => `${sport}:${bookmakers}:${eventId}:${PROPS_QS}`;
   const cacheGet = (key) => {
     const hit = propsCache.get(key);
     if (hit && hit.expires > Date.now()) return hit.data;
@@ -354,38 +364,34 @@ app.get('/api/odds', async (req, res) => {
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-  const hasPassYdsAnywhere = (arr) => Array.isArray(arr) && arr.some(g =>
+  const hasAnyProp = (arr) => Array.isArray(arr) && arr.some(g =>
     Array.isArray(g.bookmakers) && g.bookmakers.some(b =>
-      Array.isArray(b.markets) && b.markets.some(m => m.key === TEST_PROP)
+      Array.isArray(b.markets) && b.markets.some(m => PROP_KEYS.includes(m.key))
     )
   );
 
-  async function fetchPassYdsForEvent(eventId) {
-    // cache first
+  async function fetchPropsForEvent(eventId) {
     const key = cacheKey(eventId);
     const cached = cacheGet(key);
     if (cached) return cached;
 
     try {
       const r = await axios.get(`https://api.the-odds-api.com/v4/sports/${sport}/events/${eventId}/odds`, {
-        params: { apiKey: ODDS_API_KEY, regions, bookmakers, markets: TEST_PROP, oddsFormat },
+        params: { apiKey: ODDS_API_KEY, regions, bookmakers, markets: PROPS_QS, oddsFormat },
         timeout: 15000
       });
-      // event endpoint returns an object with .bookmakers
       const books = Array.isArray(r.data?.bookmakers) ? r.data.bookmakers : [];
       cacheSet(key, books);
       return books;
     } catch (e) {
-      // if rate-limited, try to serve stale cache (if any), else return empty
-      if (e.response?.data?.error_code === 'EXCEEDED_FREQ_LIMIT') {
-        return cached || [];
-      }
+      // serve stale cache if rate-limited; else empty
+      if (e.response?.data?.error_code === 'EXCEEDED_FREQ_LIMIT') return cached || [];
       return [];
     }
   }
 
   try {
-    // 1) Core list call (supports only h2h/spreads/totals)
+    // 1) Core list call (only featured markets are supported here)
     const core = await axios.get(`https://api.the-odds-api.com/v4/sports/${sport}/odds`, {
       params: { apiKey: ODDS_API_KEY, regions, bookmakers, markets: baseMarkets, oddsFormat },
       timeout: 15000
@@ -393,35 +399,28 @@ app.get('/api/odds', async (req, res) => {
 
     const games = Array.isArray(core.data) ? core.data : [];
 
-    // 2) Choose a small set of targets to avoid rate limiting
-    //    Prefer DAL–PHI if present; else a few upcoming games in next 72h
+    // 2) Pick a small set of targets to avoid rate limiting (DAL–PHI first)
     const isDALPHI = (g) => {
       const a = (g.home_team || '').toLowerCase();
       const b = (g.away_team || '').toLowerCase();
       return (a.includes('cowboys') || b.includes('cowboys') || a.includes('eagles') || b.includes('eagles'));
     };
-    const dalPhiGames = games.filter(isDALPHI);
-
-    const now = Date.now();
-    const horizon = now + 72 * 3600 * 1000;
+    const dalPhi = games.filter(isDALPHI);
+    const now = Date.now(), horizon = now + 72 * 3600 * 1000;
     const upcoming = games
-      .filter(g => {
-        const t = Date.parse(g.commence_time);
-        return Number.isFinite(t) && t >= now && t <= horizon;
-      })
-      .sort((a, b) => Date.parse(a.commence_time) - Date.parse(b.commence_time));
+      .filter(g => { const t = Date.parse(g.commence_time); return Number.isFinite(t) && t >= now && t <= horizon; })
+      .sort((a,b) => Date.parse(a.commence_time) - Date.parse(b.commence_time));
 
     const MAX_EVENTS = 4;
-    const targets = (dalPhiGames.length ? dalPhiGames : upcoming).slice(0, MAX_EVENTS);
+    const targets = (dalPhi.length ? dalPhi : upcoming).slice(0, MAX_EVENTS);
 
-    // 3) Sequentially fetch props for targets with a tiny delay to respect rate limits
+    // 3) Sequentially fetch props for selected events and merge
     let propsFound = 0;
     for (const g of targets) {
       if (!g?.id) continue;
-      const propsBooks = await fetchPassYdsForEvent(g.id);
+      const propsBooks = await fetchPropsForEvent(g.id);
       if (!propsBooks.length) { await sleep(300); continue; }
 
-      // Merge into the matching bookmaker object for this game
       g.bookmakers = Array.isArray(g.bookmakers) ? g.bookmakers : [];
       const byKey = new Map(g.bookmakers.map(b => [String(b.key || '').toLowerCase(), b]));
 
@@ -436,15 +435,18 @@ app.get('/api/odds', async (req, res) => {
           g.bookmakers.push(coreBk);
           byKey.set(key, coreBk);
         }
-        coreBk.markets = Array.isArray(coreBk.markets) ? coreBk.markets.filter(m => m.key !== TEST_PROP) : [];
-        const propMarket = Array.isArray(bk.markets) ? bk.markets.find(m => m.key === TEST_PROP) : null;
-        if (propMarket) {
-          coreBk.markets.push({ key: TEST_PROP, outcomes: propMarket.outcomes || [], last_update: propMarket.last_update || bk.last_update });
-          propsFound++;
+        coreBk.markets = Array.isArray(coreBk.markets) ? coreBk.markets : [];
+
+        // merge each requested market
+        for (const m of (bk.markets || [])) {
+          if (!PROP_KEYS.includes(m.key)) continue;
+          const idx = coreBk.markets.findIndex(x => x.key === m.key);
+          if (idx >= 0) coreBk.markets[idx] = m; else coreBk.markets.push(m);
+          if (Array.isArray(m.outcomes) && m.outcomes.length) propsFound++;
         }
       }
 
-      await sleep(300); // small backoff between event calls
+      await sleep(300); // small backoff
     }
 
     res.set('Access-Control-Expose-Headers', 'X-Props-Present');
