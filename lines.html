@@ -23,7 +23,7 @@
       cursor: pointer;
     }
     button:hover, .btn:hover, .btn-primary:hover, .bet-line:hover { background-color: #e5e7eb; }
-    .btn-primary { background:#0ea5e9; color:#000; border-color:#0ea5e9; } /* keep black text */
+    .btn-primary { background:#0ea5e9; color:#000; border-color:#0ea5e9; }
     .danger { color:#b91c1c; }
     .success { color:#065f46; }
     .warn { color:#92400e; }
@@ -79,10 +79,7 @@
         <div id="betslip"></div>
         <div class="hr"></div>
 
-        <!-- live rules pulled from league -->
         <div id="rules" class="rules muted">Loading league rules…</div>
-
-        <!-- validation messages appear here -->
         <div id="validationErrors" class="errors" style="display:none"></div>
 
         <div class="hr"></div>
@@ -249,17 +246,15 @@
          .replace('Td', 'TD')
       );
     }
-    // Desired markets and acceptable aliases per your list
     const PROP_KEY_GROUPS = [
-  ['player_rush_yds'],
-  ['player_anytime_td'],
-  ['player_1st_td', 'player_first_td'],       // keep alias here for front-end rendering
-  ['player_reception_yds', 'player_receiving_yds'],
-  ['player_receptions'],
-  ['player_pass_yds']
-];
-const PROP_KEYS_FLAT = Array.from(new Set(PROP_KEY_GROUPS.flat()));
-
+      ['player_rush_yds'],
+      ['player_anytime_td'],
+      ['player_1st_td', 'player_first_td'],
+      ['player_reception_yds', 'player_receiving_yds'],
+      ['player_receptions'],
+      ['player_pass_yds']
+    ];
+    const PROP_KEYS_FLAT = Array.from(new Set(PROP_KEY_GROUPS.flat()));
 
     /* ---------- helper to push a leg ---------- */
     function pushLeg({game, bookTitle, key, label, side, who, line, priceDecimal}) {
@@ -269,7 +264,7 @@ const PROP_KEYS_FLAT = Array.from(new Set(PROP_KEY_GROUPS.flat()));
         market: key,
         marketLabel: label,
         side: side || who,
-        team: who,                // store player name in 'team' field to fit schema
+        team: who,
         line: (line !== '' && line !== undefined) ? Number(line) : undefined,
         priceDecimal,
         oddsAmerican: am,
@@ -300,18 +295,22 @@ const PROP_KEYS_FLAT = Array.from(new Set(PROP_KEY_GROUPS.flat()));
         <div class="markets"></div>
       `;
 
-      const book = (game.bookmakers && game.bookmakers[0]) || null;
       const marketsEl = div.querySelector('.markets');
 
       // pick a bookmaker that actually has our props, else fallback to the first
-let book = null;
-if (Array.isArray(game.bookmakers) && game.bookmakers.length) {
-  book =
-    game.bookmakers.find(b =>
-      Array.isArray(b.markets) &&
-      b.markets.some(m => PROP_KEYS_FLAT.includes(m.key))
-    ) || game.bookmakers[0];
-}
+      let book = null;
+      if (Array.isArray(game.bookmakers) && game.bookmakers.length) {
+        book =
+          game.bookmakers.find(b =>
+            Array.isArray(b.markets) &&
+            b.markets.some(m => PROP_KEYS_FLAT.includes(m.key))
+          ) || game.bookmakers[0];
+      }
+      if (!book || !Array.isArray(book.markets)) {
+        marketsEl.innerHTML = '<div class="muted">No markets available for this game.</div>';
+        container.appendChild(div);
+        return;
+      }
 
       // index markets by key
       const mIndex = {};
@@ -385,7 +384,6 @@ if (Array.isArray(game.bookmakers) && game.bookmakers.length) {
       }
 
       /* --- Player Props (your exact list, with key aliases) --- */
-      // Build a list of the prop markets that exist for this game (respecting aliases)
       const presentPropKeys = [];
       PROP_KEY_GROUPS.forEach(group => {
         const found = group.find(k => mIndex[k]);
@@ -395,12 +393,11 @@ if (Array.isArray(game.bookmakers) && game.bookmakers.length) {
       if (presentPropKeys.length) {
         const details = document.createElement('details');
         details.className = 'props';
-        details.open = false; // collapsed by default
+        details.open = false;
         const summary = document.createElement('summary');
         summary.innerHTML = `<strong>Player Props</strong> <span class="muted">(tap to expand)</span>`;
         details.appendChild(summary);
 
-        // grid container
         const grid = document.createElement('div');
         grid.className = 'props-grid';
 
@@ -411,7 +408,7 @@ if (Array.isArray(game.bookmakers) && game.bookmakers.length) {
           const block = document.createElement('div');
           block.className = 'prop-block';
 
-          const label = prettyKey(want); // pretty name (e.g., "Rush Yds", "Anytime Td")
+          const label = prettyKey(want);
           const title = document.createElement('div');
           title.className = 'prop-title';
           title.textContent = label;
@@ -424,7 +421,6 @@ if (Array.isArray(game.bookmakers) && game.bookmakers.length) {
             const price = Number(oc.price);
             if (!Number.isFinite(price)) return;
 
-            // Player name + side + line
             const who = oc.description || oc.participant || oc.player || oc.name || 'Player';
             const nameUpper = String(oc.name || '').toUpperCase();
             const side =
@@ -443,8 +439,8 @@ if (Array.isArray(game.bookmakers) && game.bookmakers.length) {
             btn.addEventListener('click', () => {
               pushLeg({
                 game, bookTitle: book.title,
-                key: actual,            // actual market key from API
-                label,                  // pretty label
+                key: actual,
+                label,
                 side: side || who,
                 who, line,
                 priceDecimal: price
@@ -504,7 +500,7 @@ if (Array.isArray(game.bookmakers) && game.bookmakers.length) {
       }
       if (Number.isFinite(minLegOdds)) {
         const bad = slip.filter(l => Number(l.oddsAmerican) < Number(minLegOdds));
-        if (bad.length) errs.push(`At least one leg is below the minimum leg odds (${minLegOdds > 0 ? '+'+minLegOdds : minLegLegs}).`);
+        if (bad.length) errs.push(`At least one leg is below the minimum leg odds (${minLegOdds > 0 ? '+'+minLegOdds : minLegOdds}).`);
       }
       if (Number.isFinite(minTotalOdds)) {
         const combinedDecimal = slip.reduce((acc, l) => acc * (l.priceDecimal || 1), 1);
