@@ -463,7 +463,12 @@ const PROP_KEYS_FLAT = Array.from(new Set(PROP_KEY_GROUPS.flat()));
       const container = document.getElementById('odds-container');
       if (!container) { showError('Missing #odds-container'); return; }
       try {
-        const res = await fetch('/api/odds?sport=americanfootball_nfl');
+        const res = await fetch('/api/odds?sport=americanfootball_nfl'
+  + '&bookmakers=fanduel,draftkings,betmgm,caesars,pointsbetus'
+  + '&markets=h2h,spreads,totals,player_pass_yds');
+
+        console.debug('X-Props-Present:', res.headers.get('X-Props-Present'));
+
         if (!res.ok) {
           const t = await res.text().catch(()=> '');
           showError(`Odds request failed (${res.status}). ${t || ''}`.trim());

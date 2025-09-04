@@ -333,11 +333,14 @@ app.get('/api/odds', async (req, res) => {
   if (!ODDS_API_KEY) return res.status(500).json({ error: 'Missing ODDS_API_KEY on server' });
 
   // Core markets + the ONE prop we’re testing
-  const baseMarkets = 'h2h,spreads,totals';
-  const testProp = 'player_pass_yds';
+const baseMarkets = req.query.baseMarkets || 'h2h,spreads,totals';
+const testProp = 'player_pass_yds';
+// Allow caller to override full markets list, else default to base + prop
+const markets = req.query.markets || `${baseMarkets},${testProp}`;
 
-  // Start with FanDuel (you know they have props for DAL game)
-  const bookmakers = 'fanduel,draftkings,betmgm,caesars,pointsbetus';
+// Use a broader default set of books; caller can still override
+const bookmakers = req.query.bookmakers || 'fanduel,draftkings,betmgm,caesars,pointsbetus';
+
 
   // helper: did we get any player_ markets back?
   const hasPassYds = (arr) => Array.isArray(arr) && arr.some(g =>
@@ -352,16 +355,19 @@ app.get('/api/odds', async (req, res) => {
       params: {
         apiKey: ODDS_API_KEY,
         regions: 'us',
-        bookmakers,                      // prioritize books likely to carry props
-        markets: `${baseMarkets},${testProp}`,
+        bookmakers,
+        markets,
         oddsFormat: 'decimal'
       },
       timeout: 15000
     });
+    
 
     // Annotate for quick debugging in Network tab
+    res.set('Access-Control-Expose-Headers', 'X-Props-Present');
     res.set('X-Props-Present', String(hasPassYds(withPass.data)));
     return res.json(withPass.data);
+    
 
   } catch (err1) {
     console.warn('Props+core request failed, falling back to core only:', err1.response?.data || err1.message);
@@ -377,8 +383,10 @@ app.get('/api/odds', async (req, res) => {
         },
         timeout: 15000
       });
+      res.set('Access-Control-Expose-Headers', 'X-Props-Present');
       res.set('X-Props-Present', 'false');
       return res.json(coreOnly.data);
+      
     } catch (err2) {
       console.error('Error fetching odds:', err2.response?.data || err2.message);
       return res.status(500).json({
