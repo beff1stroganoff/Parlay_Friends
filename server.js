@@ -324,7 +324,7 @@ app.get('/api/user-leagues', async (req, res) => {
 });
 
 
-// Odds API proxy (public) – core + per-event NFL player props (FanDuel) with caching & backoff
+// Odds API proxy (public) – Sunday slate by NFL week (FanDuel core) + optional player props merge
 app.get('/api/odds', async (req, res) => {
   const { sport } = req.query;
   if (!sport) return res.status(400).json({ error: 'Missing sport' });
@@ -337,7 +337,30 @@ app.get('/api/odds', async (req, res) => {
   const regions = req.query.regions || 'us';
   const oddsFormat = req.query.oddsFormat || 'decimal';
 
-  // ✅ All six props you asked for (official keys)
+  // Week + Sunday flags
+  const weekNum = Math.max(1, parseInt(req.query.week || '1', 10));
+  const sundayOnly = ['1','true','yes'].includes(String(req.query.sundayOnly ?? '1').toLowerCase());
+  const includeProps = ['1','true','yes'].includes(String(req.query.includeProps ?? '0').toLowerCase());
+
+  // 2025 NFL Week 1 Sunday = Sep 7, 2025 (ET). Adjust per season if needed.
+  const NFL_SEASON_START_SUNDAY_ET = (req.query.seasonStartEt || '2025-09-07').trim();
+
+  const fmtETDate = (d) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
+      .format(d); // YYYY-MM-DD
+
+  const etDateOfISO = (iso) => fmtETDate(new Date(iso));
+  const isSundayET = (iso) =>
+    new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' })
+      .format(new Date(iso)) === 'Sun';
+
+  const etSundayForWeek = (n) => {
+    const baseNoon = new Date(`${NFL_SEASON_START_SUNDAY_ET}T12:00:00-04:00`);
+    const target = new Date(baseNoon.getTime() + (n - 1) * 7 * 24 * 60 * 60 * 1000);
+    return fmtETDate(target); // YYYY-MM-DD for that Sunday in ET
+  };
+
+  // Props config (official keys)
   const PROP_KEYS = [
     'player_pass_yds',
     'player_reception_tds',
@@ -345,14 +368,13 @@ app.get('/api/odds', async (req, res) => {
     'player_rush_yds',
     'player_1st_td',
     'player_anytime_td'
-  ]; // NFL props list + event endpoint requirement: the-odds-api docs. :contentReference[oaicite:1]{index=1}
+  ];
   const PROPS_QS = PROP_KEYS.join(',');
 
-  // --- simple in-memory cache for event props (2 minutes) ---
-  const CACHE_TTL_MS = 120000;
+  // Simple in-memory cache (5 minutes)
+  const CACHE_TTL_MS = 5 * 60 * 1000;
   if (!global.__propsCache) global.__propsCache = new Map();
   const propsCache = global.__propsCache;
-
   const cacheKey = (eventId) => `${sport}:${bookmakers}:${eventId}:${PROPS_QS}`;
   const cacheGet = (key) => {
     const hit = propsCache.get(key);
@@ -363,12 +385,6 @@ app.get('/api/odds', async (req, res) => {
   const cacheSet = (key, data) => propsCache.set(key, { data, expires: Date.now() + CACHE_TTL_MS });
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-  const hasAnyProp = (arr) => Array.isArray(arr) && arr.some(g =>
-    Array.isArray(g.bookmakers) && g.bookmakers.some(b =>
-      Array.isArray(b.markets) && b.markets.some(m => PROP_KEYS.includes(m.key))
-    )
-  );
 
   async function fetchPropsForEvent(eventId) {
     const key = cacheKey(eventId);
@@ -384,70 +400,79 @@ app.get('/api/odds', async (req, res) => {
       cacheSet(key, books);
       return books;
     } catch (e) {
-      // serve stale cache if rate-limited; else empty
-      if (e.response?.data?.error_code === 'EXCEEDED_FREQ_LIMIT') return cached || [];
+      if (e.response?.data?.error_code === 'EXCEEDED_FREQ_LIMIT') {
+        // Serve stale if we have it; else empty
+        return cached || [];
+      }
       return [];
     }
   }
 
   try {
-    // 1) Core list call (only featured markets are supported here)
+    // 1) Core list call (no player_* props here)
     const core = await axios.get(`https://api.the-odds-api.com/v4/sports/${sport}/odds`, {
       params: { apiKey: ODDS_API_KEY, regions, bookmakers, markets: baseMarkets, oddsFormat },
       timeout: 15000
     });
 
-    const games = Array.isArray(core.data) ? core.data : [];
+    let games = Array.isArray(core.data) ? core.data : [];
 
-    // 2) Pick a small set of targets to avoid rate limiting (DAL–PHI first)
-    const isDALPHI = (g) => {
-      const a = (g.home_team || '').toLowerCase();
-      const b = (g.away_team || '').toLowerCase();
-      return (a.includes('cowboys') || b.includes('cowboys') || a.includes('eagles') || b.includes('eagles'));
-    };
-    const dalPhi = games.filter(isDALPHI);
-    const now = Date.now(), horizon = now + 72 * 3600 * 1000;
-    const upcoming = games
-      .filter(g => { const t = Date.parse(g.commence_time); return Number.isFinite(t) && t >= now && t <= horizon; })
-      .sort((a,b) => Date.parse(a.commence_time) - Date.parse(b.commence_time));
-
-    const MAX_EVENTS = 4;
-    const targets = (dalPhi.length ? dalPhi : upcoming).slice(0, MAX_EVENTS);
-
-    // 3) Sequentially fetch props for selected events and merge
-    let propsFound = 0;
-    for (const g of targets) {
-      if (!g?.id) continue;
-      const propsBooks = await fetchPropsForEvent(g.id);
-      if (!propsBooks.length) { await sleep(300); continue; }
-
-      g.bookmakers = Array.isArray(g.bookmakers) ? g.bookmakers : [];
-      const byKey = new Map(g.bookmakers.map(b => [String(b.key || '').toLowerCase(), b]));
-
-      for (const bk of propsBooks) {
-        const key = String(bk.key || bk.bookmaker?.key || '').toLowerCase();
-        if (!key) continue;
-        const title = bk.title || bk.bookmaker?.title || key;
-
-        let coreBk = byKey.get(key);
-        if (!coreBk) {
-          coreBk = { key, title, markets: [] };
-          g.bookmakers.push(coreBk);
-          byKey.set(key, coreBk);
-        }
-        coreBk.markets = Array.isArray(coreBk.markets) ? coreBk.markets : [];
-
-        // merge each requested market
-        for (const m of (bk.markets || [])) {
-          if (!PROP_KEYS.includes(m.key)) continue;
-          const idx = coreBk.markets.findIndex(x => x.key === m.key);
-          if (idx >= 0) coreBk.markets[idx] = m; else coreBk.markets.push(m);
-          if (Array.isArray(m.outcomes) && m.outcomes.length) propsFound++;
-        }
-      }
-
-      await sleep(300); // small backoff
+    // 2) Sunday-only filter by selected week (ET)
+    if (sundayOnly) {
+      const targetSundayET = etSundayForWeek(weekNum);
+      games = games.filter(g => isSundayET(g.commence_time) && etDateOfISO(g.commence_time) === targetSundayET);
     }
+
+    // If not fetching props, return core-only Sunday slate
+    if (!includeProps || games.length === 0) {
+      res.set('Access-Control-Expose-Headers', 'X-Props-Present');
+      res.set('X-Props-Present', 'false');
+      return res.json(games);
+    }
+
+    // 3) Fetch props per filtered game (gentle on rate limits)
+    const queue = [...games];
+    const CONCURRENCY = 2;
+    let propsFound = 0;
+
+    async function worker() {
+      while (queue.length) {
+        const g = queue.shift();
+        if (!g?.id) continue;
+
+        const propsBooks = await fetchPropsForEvent(g.id);
+        if (propsBooks.length) {
+          g.bookmakers = Array.isArray(g.bookmakers) ? g.bookmakers : [];
+          const byKey = new Map(g.bookmakers.map(b => [String(b.key || '').toLowerCase(), b]));
+
+          for (const bk of propsBooks) {
+            const key = String(bk.key || bk.bookmaker?.key || '').toLowerCase();
+            if (!key) continue;
+            const title = bk.title || bk.bookmaker?.title || key;
+
+            let coreBk = byKey.get(key);
+            if (!coreBk) {
+              coreBk = { key, title, markets: [] };
+              g.bookmakers.push(coreBk);
+              byKey.set(key, coreBk);
+            }
+            coreBk.markets = Array.isArray(coreBk.markets) ? coreBk.markets : [];
+
+            for (const m of (bk.markets || [])) {
+              if (!PROP_KEYS.includes(m.key)) continue;
+              const i = coreBk.markets.findIndex(x => x.key === m.key);
+              if (i >= 0) coreBk.markets[i] = m; else coreBk.markets.push(m);
+              if (Array.isArray(m.outcomes) && m.outcomes.length) propsFound++;
+            }
+          }
+        }
+
+        // gentle backoff between event calls
+        await sleep(300);
+      }
+    }
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
     res.set('Access-Control-Expose-Headers', 'X-Props-Present');
     res.set('X-Props-Present', String(propsFound > 0));
@@ -460,6 +485,8 @@ app.get('/api/odds', async (req, res) => {
     return res.status(500).json({ error: 'Failed to fetch odds', details: err.response?.data || err.message });
   }
 });
+
+
 
 
 

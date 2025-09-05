@@ -106,16 +106,18 @@ details.props[open] summary::after { transform: rotate(180deg); }
   </style>
 </head>
 <body>
-  <div class="container" style="max-width:1200px; margin:32px auto; padding:0 16px;">
-    <div class="row" style="margin-bottom:16px">
-      <div>
-        <h1>NFL Lines</h1>
-        <div id="context" class="muted">Loading league/week...</div>
-      </div>
-      <div class="row">
-        <a class="btn" id="backToLeague" href="#">← Back to League</a>
-      </div>
+  <div class="row" style="margin-bottom:16px">
+    <div>
+      <h1>NFL Lines</h1>
+      <div id="context" class="muted">Loading league/week...</div>
     </div>
+    <div class="row" style="gap:8px">
+      <label for="weekSelect" class="muted">Week</label>
+      <select id="weekSelect" class="btn" style="min-width:90px"></select>
+      <a class="btn" id="backToLeague" href="#">← Back to League</a>
+    </div>
+  </div>
+  
 
     <div class="grid">
       <!-- LEFT: GAMES -->
@@ -154,7 +156,7 @@ details.props[open] summary::after { transform: rotate(180deg); }
         <div class="muted" style="margin-top:10px">Minimum legs/odds rules are enforced before submission.</div>
       </div>
     </div>
-  </div>
+  
 
   <script>
     /* ---------- Debug helper ---------- */
@@ -175,6 +177,29 @@ details.props[open] summary::after { transform: rotate(180deg); }
     const q = new URLSearchParams(location.search);
     const leagueId = q.get('leagueId');
     const week = Number(q.get('week') || 1);
+
+    // build week select (1-18)
+function buildWeekSelect(current) {
+  const sel = document.getElementById('weekSelect');
+  if (!sel) return;
+  sel.innerHTML = '';
+  for (let i = 1; i <= 18; i++) {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = `Week ${i}`;
+    if (i === current) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener('change', () => {
+    const w = sel.value;
+    // keep leagueId in the URL and set new week
+    const url = new URL(location.href);
+    url.searchParams.set('week', w);
+    if (leagueId) url.searchParams.set('leagueId', leagueId);
+    location.href = url.toString();
+  });
+}
+
 
     /* ---------- Odds conversions ---------- */
     function toAmerican(decimal) {
@@ -604,39 +629,42 @@ if (presentPropKeys.length) {
 
     /* ---------- Fetch NFL odds ---------- */
     async function loadNFL() {
-      const container = document.getElementById('odds-container');
-      if (!container) { showError('Missing #odds-container'); return; }
-      try {
-        const res = await fetch(
-  '/api/odds?sport=americanfootball_nfl'
-  + '&bookmakers=fanduel'
-  + '&markets=h2h,spreads,totals,player_pass_yds'
-  + '&regions=us&oddsFormat=decimal'
-);
+  const container = document.getElementById('odds-container');
+  if (!container) { showError('Missing #odds-container'); return; }
+  try {
+    const res = await fetch(
+      '/api/odds?sport=americanfootball_nfl'
+      + '&bookmakers=fanduel'
+      + `&week=${encodeURIComponent(week)}`
+      + '&sundayOnly=1'
+      + '&includeProps=1'
+      + '&regions=us&oddsFormat=decimal'
+    );
 console.debug('X-Props-Present:', res.headers.get('X-Props-Present'));
 
 
-        if (!res.ok) {
-          const t = await res.text().catch(()=> '');
-          showError(`Odds request failed (${res.status}). ${t || ''}`.trim());
-          container.innerHTML = '<div class="danger">Failed to load NFL odds.</div>';
-          return;
-        }
-        const data = await res.json();
-
-        if (!Array.isArray(data) || data.length === 0) {
-          container.innerHTML = '<div class="muted">No NFL odds available.</div>';
-          return;
-        }
-
-        container.innerHTML = '';
-        data.forEach(game => renderGame(game, container));
-      } catch (e) {
-        console.error(e);
-        showError('Unexpected error loading NFL odds (see console).');
-        container.innerHTML = '<div class="danger">Failed to load NFL odds.</div>';
-      }
+if (!res.ok) {
+      const t = await res.text().catch(()=> '');
+      showError(`Odds request failed (${res.status}). ${t || ''}`.trim());
+      container.innerHTML = '<div class="danger">Failed to load NFL odds.</div>';
+      return;
     }
+    const data = await res.json();
+
+    if (!Array.isArray(data) || data.length === 0) {
+      container.innerHTML = '<div class="muted">No Sunday slate games found for this week.</div>';
+      return;
+    }
+
+    container.innerHTML = '';
+    data.forEach(game => renderGame(game, container));
+  } catch (e) {
+    console.error(e);
+    showError('Unexpected error loading NFL odds (see console).');
+    container.innerHTML = '<div class="danger">Failed to load NFL odds.</div>';
+  }
+}
+
 
     /* ---------- Submit (with validation) ---------- */
     function validateSlip() {
@@ -713,7 +741,9 @@ console.debug('X-Props-Present:', res.headers.get('X-Props-Present'));
       const contextEl = document.getElementById('context');
       const backBtn = document.getElementById('backToLeague');
       if (!leagueId) { alert('No leagueId provided. Returning to dashboard.'); location.href = 'dashboard.html'; return; }
-      if (contextEl) contextEl.textContent = `League: ${leagueId} • Week: ${week}`;
+      if (contextEl) contextEl.textContent = `League: ${leagueId} • Week: ${week} • Sunday slate`;
+buildWeekSelect(week);
+
       if (backBtn) backBtn.href = `league_home.html?leagueId=${encodeURIComponent(leagueId)}`;
 
       await loadLeagueRules();
