@@ -496,26 +496,48 @@ app.post('/api/parlay/submit', async (req, res) => {
   const userId = req.user?.id;
   const { leagueId, week, picks, odds } = req.body;
 
-  if (!userId || !leagueId || !week || !Array.isArray(picks) || !odds) {
-    return res.status(400).json({ error: 'Missing required parlay data.' });
+  // If token is expired/invalid, send a clear 401 so the client can re-login
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized (token expired or invalid). Please log in again.' });
   }
+
+  // Stricter validation to avoid vague errors
+  const weekNum = Number(week);
+  const oddsNum = Number(odds);
+  if (!leagueId || !Number.isFinite(weekNum) || !Array.isArray(picks) || !Number.isFinite(oddsNum) || picks.length === 0) {
+    return res.status(400).json({ error: 'Missing or invalid parlay data.' });
+  }
+
   try {
     const parlayDoc = await Parlay.findOneAndUpdate(
-      { userId, leagueId, week },
-      { $set: { picks, odds, submittedAt: new Date() } },
+      { userId, leagueId, week: weekNum },
+      { $set: { picks, odds: oddsNum, submittedAt: new Date() } },
       { upsert: true, new: true }
     );
-    res.status(200).json({ message: 'Parlay submitted successfully!', parlayId: parlayDoc._id });
+    return res.status(200).json({ message: 'Parlay submitted successfully!', parlayId: parlayDoc._id });
   } catch (err) {
     console.error('Error saving parlay:', err);
-    res.status(500).json({ error: 'Server error saving parlay.' });
+    return res.status(500).json({ error: 'Server error saving parlay.' });
   }
 });
 
-// Weekly parlays (public)
-app.get('/api/parlay/week/:leagueId/:week', async (req, res) => {
+
+
+//load week button blocker
+function requireAuth(req, res, next) {
+  if (!req.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+
+
+// Weekly parlays (requires auth + you must have submitted to view others)
+app.get('/api/parlay/week/:leagueId/:week', requireAuth, async (req, res) => {
   const { leagueId, week } = req.params;
   try {
+    const me = await Parlay.findOne({ leagueId, userId: req.user.id, week });
+    if (!me) {
+      return res.status(403).json({ error: 'Submit your parlay for this week to view others.' });
+    }
     const parlays = await Parlay.find({ leagueId, week }).populate('userId', 'username');
     res.json(parlays);
   } catch (err) {
@@ -523,6 +545,20 @@ app.get('/api/parlay/week/:leagueId/:week', async (req, res) => {
     res.status(500).json({ error: 'Server error fetching picks' });
   }
 });
+
+
+// Did I submit my parlay for this week? (requires auth)
+app.get('/api/parlay/mine/:leagueId/:week', requireAuth, async (req, res) => {
+  const { leagueId, week } = req.params;
+  try {
+    const mine = await Parlay.findOne({ leagueId, userId: req.user.id, week });
+    res.json({ submitted: !!mine });
+  } catch (err) {
+    console.error('Error checking my parlay:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 
 // Settle parlay (requires auth & must be league creator)
 app.post('/api/parlay/settle', async (req, res) => {

@@ -281,6 +281,20 @@ function buildWeekSelect(current) {
           msgs.push(`Your total parlay odds ${fmtAmerican(combinedAm)} are below the minimum required +${minTotalOdds}.`);
         }
       }
+      // 🚫 No same-game parlays: only one leg per gameId
+{
+  const ids = slip.map(l => l.gameId).filter(Boolean);
+  const seen = new Set();
+  let dupFound = false;
+  for (const id of ids) {
+    if (seen.has(id)) { dupFound = true; break; }
+    seen.add(id);
+  }
+  if (dupFound) {
+    msgs.push('Only one leg per game is allowed (no same-game parlays).');
+  }
+}
+
 
       if (msgs.length) {
         box.style.display = '';
@@ -687,6 +701,20 @@ if (!res.ok) {
           errs.push(`Your total parlay odds ${fmtAmerican(combinedAm)} are below the minimum required +${minTotalOdds}.`);
         }
       }
+
+      // 🚫 No same-game parlays (server will reject too, but we block early)
+{
+  const ids = slip.map(l => l.gameId).filter(Boolean);
+  const seen = new Set();
+  for (const id of ids) {
+    if (seen.has(id)) {
+      errs.push('Only one leg per game is allowed (no same-game parlays).');
+      break;
+    }
+    seen.add(id);
+  }
+}
+
       return errs;
     }
 
@@ -712,26 +740,38 @@ if (!res.ok) {
       const totalOdds = slip.reduce((acc, l) => acc * (l.priceDecimal || 1), 1);
 
       try {
-        const res = await fetch('/api/parlay/submit', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + token
-          },
-          body: JSON.stringify({ leagueId, week, picks, odds: Number(totalOdds.toFixed(4)) })
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          console.error('Submit error:', data);
-          alert(data.error || 'Error submitting parlay.');
-          return;
-        }
-        alert('Parlay submitted!');
-        location.href = `league_home.html?leagueId=${encodeURIComponent(leagueId)}`;
-      } catch (err) {
-        console.error(err);
-        alert('Network/server error submitting parlay.');
-      }
+  const res = await fetch('/api/parlay/submit', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + token
+    },
+    body: JSON.stringify({ leagueId, week, picks, odds: Number(totalOdds.toFixed(4)) })
+  });
+
+  if (res.status === 401) {
+    // token expired or invalid → log out and go to login
+    localStorage.removeItem('token');
+    alert('Your session expired. Please log in again.');
+    location.href = 'login.html';
+    return;
+  }
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    console.error('Submit error:', data);
+    alert(data.error || 'Error submitting parlay.');
+    return;
+  }
+
+  alert('Parlay submitted!');
+  location.href = `league_home.html?leagueId=${encodeURIComponent(leagueId)}`;
+} catch (err) {
+  console.error(err);
+  alert('Network/server error submitting parlay.');
+}
+
     }
 
     document.getElementById('submitParlay').addEventListener('click', submitParlay);

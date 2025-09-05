@@ -260,3 +260,5 @@ html, body {
   .btn-submit:hover, .btn-clear:hover {
     opacity: 0.9;
   }  
+
+  .btn[disabled] { opacity: .5; cursor: not-allowed; }

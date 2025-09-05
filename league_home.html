@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>League Home | Parlay Friends</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* Only add a disabled state; do NOT change your dark theme */
+    button[disabled], .btn-submit[disabled], .button[disabled] {
+      opacity: .5;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+  </style>
 </head>
 <body>
   <header>
@@ -23,9 +31,7 @@
 
       <div class="center mt-4">
         <button id="makePicksBtn" class="btn-submit">Make picks for this week</button>
-
       </div>
-      
 
       <div class="center mt-4">
         <button id="edit-settings">Edit League Settings</button>
@@ -37,212 +43,236 @@
       <label for="week-selector">Week #:</label>
       <input type="number" id="week-selector" min="1" value="1" />
       <button id="load-week">Load Week</button>
+      <div id="viewLockHint" class="muted" style="display:none">Locked until you submit your parlay for this week.</div>
 
       <div id="standings-results" class="mt-4"></div>
     </section>
-    <div id="season-stats" class="mt-4"></div>
 
+    <div id="season-stats" class="mt-4"></div>
   </main>
 
   <footer>
     <p>&copy; 2025 Parlay Friends. All rights reserved.</p>
   </footer>
 
- <!-- ✅ league_home.html scripts (drop-in replacement) -->
-<script>
-  // --- URL/context ---
-  const params = new URLSearchParams(window.location.search);
-  const leagueId = params.get('leagueId');
+  <script>
+    // --- URL/context ---
+    const params = new URLSearchParams(window.location.search);
+    const leagueId = params.get('leagueId');
+    if (!leagueId) {
+      alert('No league ID found! Redirecting to dashboard...');
+      window.location.href = 'dashboard.html';
+    }
 
-  if (!leagueId) {
-    alert('No league ID found! Redirecting to dashboard...');
-    window.location.href = 'dashboard.html';
-  }
+    // --- Helpers ---
+    function getCurrentNFLWeek() {
+      // Update each season (2025 opener: Thu Sep 4, 2025 ET)
+      const seasonStart = new Date('2025-09-04T00:00:00-04:00');
+      const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+      const diff = Date.now() - seasonStart.getTime();
+      return Math.max(1, Math.ceil(diff / msPerWeek));
+    }
+    // Decimal -> American
+    function americanFromDecimal(decimal) {
+      const d = Number(decimal);
+      if (!isFinite(d) || d <= 1) return -10000;
+      return d >= 2 ? Math.round((d - 1) * 100) : Math.round(-100 / (d - 1));
+    }
+    function fmtAmerican(n) { return n > 0 ? `+${n}` : `${n}`; }
 
-  // --- Helpers ---
-  function getCurrentNFLWeek() {
-    // TODO: update season start each year
-    const seasonStart = new Date('2025-09-04'); // 2025 NFL season opener (Thu)
-    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-    const diff = Date.now() - seasonStart.getTime();
-    const week = Math.ceil(diff / msPerWeek);
-    return Math.max(1, week); // clamp to at least Week 1
-  }
-
-  // --- Load league header/details ---
-  async function loadLeague() {
-    try {
-      const response = await fetch(`/league/${leagueId}`, {
-        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
-      });
-
-      const league = await response.json();
-
-      if (response.ok) {
-        document.getElementById('leagueName').textContent = league.name;
-        document.getElementById('leagueDetails').innerHTML = `
-          <strong>League Type:</strong> ${league.settings.leagueType}<br>
-          <strong>Minimum Total Odds:</strong> +${league.settings.minTotalOdds}<br>
-          <strong>Minimum Leg Odds:</strong> ${league.settings.minLegOdds}<br>
-          <strong>Number of Legs:</strong> ${league.settings.numLegs}<br>
-          <strong>Submission Deadline:</strong> ${league.settings.submissionDeadline}
-        `;
-      } else {
+    // --- League header/details (PUBLIC: no auth header to avoid JWT logs) ---
+    async function loadLeague() {
+      try {
+        const response = await fetch(`/league/${leagueId}`);
+        const league = await response.json();
+        if (response.ok) {
+          document.getElementById('leagueName').textContent = league.name;
+          document.getElementById('leagueDetails').innerHTML = `
+            <strong>League Type:</strong> ${league.settings.leagueType}<br>
+            <strong>Minimum Total Odds:</strong> +${league.settings.minTotalOdds}<br>
+            <strong>Minimum Leg Odds:</strong> ${league.settings.minLegOdds}<br>
+            <strong>Number of Legs:</strong> ${league.settings.numLegs}<br>
+            <strong>Submission Deadline:</strong> ${league.settings.submissionDeadline}
+          `;
+        } else {
+          document.getElementById('leagueDetails').textContent =
+            league.error || 'Failed to load league details.';
+        }
+      } catch (err) {
+        console.error('Error loading league:', err);
         document.getElementById('leagueDetails').textContent =
-          league.error || 'Failed to load league details.';
+          'Server error loading league details.';
       }
-    } catch (err) {
-      console.error('Error loading league:', err);
-      document.getElementById('leagueDetails').textContent =
-        'Server error loading league details.';
-    }
-  }
-
-  // --- Weekly picks/standings (single source of truth) ---
-  async function loadWeekPicks() {
-    const weekSel = document.getElementById('week-selector');
-    const container = document.getElementById('standings-results');
-
-    const week = parseInt(weekSel?.value, 10);
-    if (!leagueId || !week) {
-      alert('Missing league ID or week.');
-      return;
     }
 
-    try {
-      const res = await fetch(`/api/parlay/week/${leagueId}/${week}`, {
-        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
-      });
-      const data = await res.json();
+    // --- Gatekeeping: enable "Load Week" only after MY submission for that week ---
+    async function checkMySubmissionAndToggle() {
+      const btn = document.getElementById('load-week');
+      const hint = document.getElementById('viewLockHint');
+      const weekSel = document.getElementById('week-selector');
+      if (!btn || !weekSel) return;
 
-      if (!Array.isArray(data) || data.length === 0) {
-        container.innerHTML = '<p class="center">No parlays submitted for this week.</p>';
+      const week = parseInt(weekSel.value, 10);
+      btn.disabled = true;               // default: locked
+      if (hint) hint.style.display = 'block';
+
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;              // keep locked if not logged in
+        const res = await fetch(
+          `/api/parlay/mine/${encodeURIComponent(leagueId)}/${encodeURIComponent(week)}`,
+          { headers: { 'Authorization': 'Bearer ' + token } }
+        );
+        const data = await res.json().catch(() => ({}));
+        const ok = !!data?.submitted;
+        btn.disabled = !ok;
+        if (hint) hint.style.display = ok ? 'none' : 'block';
+      } catch (_) {
+        // keep locked on error
+      }
+    }
+
+    // --- Weekly picks/standings (AUTH: server enforces gating) ---
+    async function loadWeekPicks() {
+      const weekSel = document.getElementById('week-selector');
+      const container = document.getElementById('standings-results');
+      const week = parseInt(weekSel?.value, 10);
+
+      if (!leagueId || !week) {
+        alert('Missing league ID or week.');
         return;
       }
 
-      container.innerHTML = '';
-      data.forEach(parlay => {
-        const userDiv = document.createElement('div');
-        userDiv.className = 'line-item';
-        userDiv.innerHTML = `<strong>${parlay.userId.username}</strong><br>`;
+      try {
+        const res = await fetch(
+          `/api/parlay/week/${encodeURIComponent(leagueId)}/${encodeURIComponent(week)}`,
+          { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') } }
+        );
 
-        // legs
-        parlay.picks.forEach(pick => {
-          const oddsFmt = pick.odds > 0 ? '+' + pick.odds : pick.odds;
-          userDiv.innerHTML += `• ${pick.team} (${pick.type.toUpperCase()}) @ ${oddsFmt}<br>`;
+        if (res.status === 403) {
+          document.getElementById('viewLockHint').style.display = 'block';
+          alert('Submit your parlay for this week to view others.');
+          return;
+        }
+
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+          container.innerHTML = '<p class="center">No parlays submitted for this week.</p>';
+          return;
+        }
+
+        container.innerHTML = '';
+        data.forEach(parlay => {
+          const userDiv = document.createElement('div');
+          userDiv.className = 'line-item';
+          userDiv.innerHTML = `<strong>${parlay.userId?.username || 'User'}</strong><br>`;
+
+          // Individual legs (pick.odds already American per submit flow)
+          (parlay.picks || []).forEach(pick => {
+            const oddsFmt = Number(pick.odds) > 0 ? '+' + pick.odds : String(pick.odds);
+            userDiv.innerHTML += `• ${pick.team} (${String(pick.type || '').toUpperCase()}) @ ${oddsFmt}<br>`;
+          });
+
+          // Total odds (stored decimal) -> American
+          const totalAm = fmtAmerican(americanFromDecimal(parlay.odds));
+          userDiv.innerHTML += `<em>Total Odds: ${totalAm}</em><hr>`;
+          container.appendChild(userDiv);
         });
-
-        userDiv.innerHTML += `<em>Total Odds: ${Number(parlay.odds).toFixed(2)}</em><hr>`;
-        container.appendChild(userDiv);
-      });
-    } catch (err) {
-      console.error('Failed to fetch standings:', err);
-      container.innerHTML = '<p class="center">Error loading picks.</p>';
-    }
-  }
-
-  // --- Season stats table ---
-  async function loadSeasonStats() {
-    const token = localStorage.getItem('token');
-    const container = document.getElementById('season-stats');
-    if (!leagueId || !container) return;
-
-    try {
-      const res = await fetch(`/api/league/${leagueId}/stats`, {
-        headers: { 'Authorization': 'Bearer ' + token }
-      });
-      const data = await res.json();
-
-      if (!Array.isArray(data) || data.length === 0) {
-        container.innerHTML = '<p class="center">No stats yet.</p>';
-        return;
+      } catch (err) {
+        console.error('Failed to fetch standings:', err);
+        container.innerHTML = '<p class="center">Error loading picks.</p>';
       }
-
-      const rows = data.map(s =>
-        `<tr>
-          <td>${s.username}</td>
-          <td class="center">${s.legsWon}</td>
-          <td class="center">${s.legsLost}</td>
-          <td class="center">${s.parlayWins}</td>
-          <td class="center">${s.parlayLosses}</td>
-          <td class="center"><strong>${s.points}</strong></td>
-        </tr>`
-      ).join('');
-
-      container.innerHTML = `
-        <h3>Season Stats</h3>
-        <div class="line-item">
-          <table style="width:100%; border-collapse:collapse;">
-            <thead>
-              <tr>
-                <th style="text-align:left;">Member</th>
-                <th>Legs Won</th>
-                <th>Legs Lost</th>
-                <th>Parlay Wins</th>
-                <th>Parlay Losses</th>
-                <th>Points</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>`;
-    } catch (err) {
-      console.error('Stats load error:', err);
-      container.innerHTML = '<p class="center">Error loading stats.</p>';
     }
-  }
 
-  // --- Wire up buttons/initialization ---
-  document.addEventListener('DOMContentLoaded', () => {
-    // Edit settings button
-    const editBtn = document.getElementById('edit-settings');
-    if (editBtn) {
-      editBtn.addEventListener('click', () => {
+    // --- Season stats (PUBLIC: no auth header to avoid JWT logs) ---
+    async function loadSeasonStats() {
+      const container = document.getElementById('season-stats');
+      if (!leagueId || !container) return;
+
+      try {
+        const res = await fetch(`/api/league/${leagueId}/stats`);
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+          container.innerHTML = '<p class="center">No stats yet.</p>';
+          return;
+        }
+
+        const rows = data.map(s =>
+          `<tr>
+            <td>${s.username}</td>
+            <td class="center">${s.legsWon}</td>
+            <td class="center">${s.legsLost}</td>
+            <td class="center">${s.parlayWins}</td>
+            <td class="center">${s.parlayLosses}</td>
+            <td class="center"><strong>${s.points}</strong></td>
+          </tr>`
+        ).join('');
+
+        container.innerHTML = `
+          <h3>Season Stats</h3>
+          <div class="line-item">
+            <table style="width:100%; border-collapse:collapse;">
+              <thead>
+                <tr>
+                  <th style="text-align:left;">Member</th>
+                  <th>Legs Won</th>
+                  <th>Legs Lost</th>
+                  <th>Parlay Wins</th>
+                  <th>Parlay Losses</th>
+                  <th>Points</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>`;
+      } catch (err) {
+        console.error('Stats load error:', err);
+        container.innerHTML = '<p class="center">Error loading stats.</p>';
+      }
+    }
+
+    // --- Wire up ---
+    document.addEventListener('DOMContentLoaded', () => {
+      // Edit settings
+      document.getElementById('edit-settings')?.addEventListener('click', () => {
         window.location.href = `league_settings.html?leagueId=${leagueId}`;
       });
-    }
 
-    // Make picks for this week → go to lines.html with league + week
-    const makePicksBtn = document.getElementById('makePicksBtn'); // ensure your button has this id
-    if (makePicksBtn) {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        makePicksBtn.disabled = true;
-        makePicksBtn.title = 'Please log in';
-      } else {
-        makePicksBtn.disabled = false;
-        makePicksBtn.addEventListener('click', () => {
-          const wk = getCurrentNFLWeek();
-          window.location.href = `lines.html?leagueId=${encodeURIComponent(leagueId)}&week=${encodeURIComponent(wk)}`;
-        });
+      // Make picks for CURRENT week
+      const makePicksBtn = document.getElementById('makePicksBtn');
+      if (makePicksBtn) {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          makePicksBtn.disabled = true;
+          makePicksBtn.title = 'Please log in';
+        } else {
+          makePicksBtn.addEventListener('click', () => {
+            const wk = getCurrentNFLWeek();
+            window.location.href = `lines.html?leagueId=${encodeURIComponent(leagueId)}&week=${encodeURIComponent(wk)}`;
+          });
+        }
       }
-    }
 
-    // Load league header/details
-    loadLeague();
+      // Preselect current week if missing/invalid
+      const weekSel = document.getElementById('week-selector');
+      if (weekSel && (!weekSel.value || Number(weekSel.value) < 1)) {
+        weekSel.value = String(getCurrentNFLWeek());
+      }
 
-    // Week selector + fetch button
-    const loadWeekBtn = document.getElementById('load-week');
-    const weekSel = document.getElementById('week-selector');
+      // Lock/Unlock Load button based on my submission
+      checkMySubmissionAndToggle();
+      weekSel?.addEventListener('input', checkMySubmissionAndToggle);
+      weekSel?.addEventListener('change', checkMySubmissionAndToggle);
 
-    // Preselect current week if the selector exists and is empty
-    if (weekSel && !weekSel.value) {
-      const wk = getCurrentNFLWeek();
-      // only set if it's one of the options
-      const opt = [...weekSel.options].find(o => Number(o.value) === wk);
-      if (opt) weekSel.value = String(wk);
-    }
+      // Load weekly parlays on click
+      document.getElementById('load-week')?.addEventListener('click', loadWeekPicks);
 
-    if (loadWeekBtn) {
-      loadWeekBtn.addEventListener('click', loadWeekPicks);
-    }
-
-    // Season stats
-    loadSeasonStats();
-  });
-</script>
-
-  
-
+      // Load header + stats (public)
+      loadLeague();
+      loadSeasonStats();
+    });
+  </script>
 </body>
 </html>
