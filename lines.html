@@ -103,6 +103,14 @@ details.props[open] summary::after { transform: rotate(180deg); }
 #validationErrors ul { margin: 6px 0 0 16px; }
 #validationErrors li { margin: 4px 0; }
 
+/* Visual lock for same-game: */
+button[disabled], .btn[disabled] { 
+  opacity: .5; 
+  cursor: not-allowed; 
+  pointer-events: none;
+}
+
+
   </style>
 </head>
 <body>
@@ -249,13 +257,19 @@ function buildWeekSelect(current) {
       }
 
       el.querySelectorAll('[data-remove]').forEach(btn => {
-        btn.addEventListener('click', e => {
-          const i = Number(e.currentTarget.getAttribute('data-remove'));
-          slip.splice(i, 1);
-          renderSlip();
-          renderValidation();
-        });
-      });
+  btn.addEventListener('click', e => {
+    const i = Number(e.currentTarget.getAttribute('data-remove'));
+    const removed = slip[i];
+    slip.splice(i, 1);
+    renderSlip();
+    renderValidation();
+    // If that was the only leg for the game, unlock its buttons
+    if (removed?.gameId && !gameHasLeg(removed.gameId)) {
+      toggleGameButtons(removed.gameId, false);
+    }
+  });
+});
+
     }
 
     function renderValidation() {
@@ -357,24 +371,44 @@ const PROP_KEY_GROUPS = [
 const PROP_KEYS_FLAT = Array.from(new Set(PROP_KEY_GROUPS.flat()));
 
 
+// --- No same-game parlays helpers ---
+function gameHasLeg(gameId) {
+  return slip.some(l => l.gameId === gameId);
+}
+function toggleGameButtons(gameId, disabled) {
+  const gameDiv = document.querySelector(`.game[data-game-id="${gameId}"]`);
+  if (!gameDiv) return;
+  gameDiv.querySelectorAll('button.btn').forEach(btn => { btn.disabled = !!disabled; });
+}
+
+
+
 
     /* ---------- helper to push a leg ---------- */
     function pushLeg({game, bookTitle, key, label, side, who, line, priceDecimal}) {
-      const am = toAmerican(priceDecimal);
-      slip.push({
-        gameId: game.id,
-        market: key,
-        marketLabel: label,
-        side: side || who,
-        team: who,
-        line: (line !== '' && line !== undefined) ? Number(line) : undefined,
-        priceDecimal,
-        oddsAmerican: am,
-        book: bookTitle
-      });
-      renderSlip();
-      renderValidation();
-    }
+  if (!game?.id) { showError('Missing game id for selection.'); return; }
+  if (gameHasLeg(game.id)) {
+    alert('Only one leg per game is allowed. Remove the existing leg first.');
+    return;
+  }
+  const am = toAmerican(priceDecimal);
+  slip.push({
+    gameId: game.id,
+    market: key,
+    marketLabel: label,
+    side: side || who,
+    team: who,
+    line: (line !== '' && line !== undefined) ? Number(line) : undefined,
+    priceDecimal,
+    oddsAmerican: am,
+    book: bookTitle
+  });
+  // Lock this game's buttons
+  toggleGameButtons(game.id, true);
+  renderSlip();
+  renderValidation();
+}
+
 
 
     // Drop in smarter parsing for Over/Under vs. Yes/No
@@ -420,6 +454,9 @@ function parseOutcome(marketKey, oc) {
     function renderGame(game, container) {
       const div = document.createElement('div');
       div.className = 'game';
+
+      div.setAttribute('data-game-id', game.id || '');
+
 
       const home = game?.home_team || 'Home';
       const away = game?.away_team || 'Away';
@@ -636,6 +673,8 @@ if (presentPropKeys.length) {
   details.appendChild(grid);
   marketsEl.appendChild(details);
 }
+// If a leg for this game is already on the slip, keep its buttons disabled
+if (gameHasLeg(game.id)) toggleGameButtons(game.id, true);
 
 
       container.appendChild(div);
