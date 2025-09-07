@@ -509,11 +509,21 @@ app.post('/api/parlay/submit', async (req, res) => {
   }
 
   try {
-    const parlayDoc = await Parlay.findOneAndUpdate(
-      { userId, leagueId, week: weekNum },
-      { $set: { picks, odds: oddsNum, submittedAt: new Date() } },
-      { upsert: true, new: true }
-    );
+    
+const normPicks = (Array.isArray(picks) ? picks : []).map(p => ({
+  team: String(p.team ?? ''),
+  type: String(p.type ?? ''),
+  side: p.side != null ? String(p.side) : null,
+  line: (p.line === '' || p.line == null) ? null : Number(p.line),
+  odds: Number(p.odds)
+}));
+
+const parlayDoc = await Parlay.findOneAndUpdate(
+  { userId, leagueId, week: weekNum },
+  { $set: { picks: normPicks, odds: oddsNum, submittedAt: new Date() } },
+  { upsert: true, new: true }
+);
+
     return res.status(200).json({ message: 'Parlay submitted successfully!', parlayId: parlayDoc._id });
   } catch (err) {
     console.error('Error saving parlay:', err);

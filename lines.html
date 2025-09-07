@@ -775,7 +775,15 @@ if (!res.ok) {
         errBox.innerHTML = '';
       }
 
-      const picks = slip.map(l => ({ team: l.team, type: l.market, odds: l.oddsAmerican }));
+      const picks = slip.map(l => ({
+  team: l.team,               // team OR player name
+  type: l.market,             // e.g. 'total', 'player_pass_yds'
+  side: l.side ?? null,       // 'Over' | 'Under' | 'Yes' | etc.
+  line: (l.line !== undefined && l.line !== null) ? Number(l.line) : null, // numeric line/yds
+  odds: l.oddsAmerican        // keep as American in picks
+}));
+
+
       const totalOdds = slip.reduce((acc, l) => acc * (l.priceDecimal || 1), 1);
 
       try {

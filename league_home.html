@@ -169,10 +169,56 @@
           userDiv.innerHTML = `<strong>${parlay.userId?.username || 'User'}</strong><br>`;
 
           // Individual legs (pick.odds already American per submit flow)
-          (parlay.picks || []).forEach(pick => {
-            const oddsFmt = Number(pick.odds) > 0 ? '+' + pick.odds : String(pick.odds);
-            userDiv.innerHTML += `• ${pick.team} (${String(pick.type || '').toUpperCase()}) @ ${oddsFmt}<br>`;
-          });
+         // Short labels for display
+function shortLabel(type) {
+  const t = String(type || '').toLowerCase();
+  const m = {
+    moneyline: 'ML',
+    spread: 'SPREAD',
+    total: 'TOTAL',
+    player_pass_yds: 'PASS YDS',
+    player_rush_yds: 'RUSH YDS',
+    player_reception_yds: 'REC YDS',
+    player_anytime_td: 'ANYTIME TD',
+    player_1st_td: '1ST TD'
+  };
+  return m[t] || t.toUpperCase();
+}
+function isNum(v){ return v !== '' && v !== null && v !== undefined && Number.isFinite(Number(v)); }
+
+(parlay.picks || []).forEach(pick => {
+  const type = String(pick.type || '').toLowerCase();
+  const label = shortLabel(type);
+  const oddsFmt = Number(pick.odds) > 0 ? '+' + pick.odds : String(pick.odds);
+
+  const sideStr = String(pick.side || '');
+  const isOver  = /^over$/i.test(sideStr);
+  const isUnder = /^under$/i.test(sideStr);
+  const ouTag   = isOver ? 'O' : (isUnder ? 'U' : '');
+
+  const showLineFor = new Set(['total','player_pass_yds','player_rush_yds','player_reception_yds']);
+  const lineTxt = (showLineFor.has(type) && isNum(pick.line)) ? ` ${Number(pick.line)}` : '';
+
+  // subject text:
+  //  - totals: "TOTAL"
+  //  - player props: player name (stored in pick.team)
+  //  - ML/Spread: team name
+  const subject = type === 'total' ? 'TOTAL' : (pick.team || '');
+
+  // build the parentheses text
+  let paren = '(' + (type === 'total' ? '' : label);
+if (ouTag) paren += (type === 'total' ? ouTag : ' ' + ouTag);
+if (lineTxt) paren += (type === 'total' && ouTag ? ' ' : '') + lineTxt;
+paren += ')';
+
+
+  // For TD markets there is no O/U or line — paren already just "(ANYTIME TD)" / "(1ST TD)"
+  userDiv.innerHTML += `• ${subject} ${paren} @ ${oddsFmt}<br>`;
+});
+
+
+
+
 
           // Total odds (stored decimal) -> American
           const totalAm = fmtAmerican(americanFromDecimal(parlay.odds));
