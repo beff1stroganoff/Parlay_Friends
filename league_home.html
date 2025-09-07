@@ -48,6 +48,18 @@
       <div id="standings-results" class="mt-4"></div>
     </section>
 
+
+    <section class="line-item" id="settleSection" style="display:none">
+      <h3>Admin: Settle Week</h3>
+      <div class="muted">Only the league creator can use this.</div>
+      <div id="settleList" class="mt-4"></div>
+      <div class="center mt-4">
+        <button id="settleSave">Save Results</button>
+      </div>
+      <div id="settleMsg" class="muted" style="margin-top:8px"></div>
+    </section>
+                  
+
     <div id="season-stats" class="mt-4"></div>
   </main>
 
@@ -318,7 +330,116 @@ paren += ')';
       // Load header + stats (public)
       loadLeague();
       loadSeasonStats();
+      showSettleIfCreator();
     });
   </script>
+
+<script>
+  // --- Show the panel only if I’m the creator
+  async function showSettleIfCreator() {
+    const token = localStorage.getItem('token');
+    const myId = localStorage.getItem('userId'); // your login flow usually stores this
+    if (!token) return;
+  
+    // fetch league with auth so we can see creator
+    const lr = await fetch(`/league/${leagueId}`, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const league = await lr.json();
+    const creatorId = league?.creator?._id || league?.creator;
+    const isCreator = !!(creatorId && myId && creatorId === myId);
+    if (!isCreator) return;
+  
+    document.getElementById('settleSection').style.display = '';
+    await buildSettleList(); // load current week by default
+    document.getElementById('settleSave')?.addEventListener('click', saveSettlements);
+  
+    // keep the panel in sync with the week selector
+    document.getElementById('week-selector')?.addEventListener('change', buildSettleList);
+  }
+  
+  // --- Build the list of members’ parlays for the selected week
+  async function buildSettleList() {
+    const token = localStorage.getItem('token');
+    const week = parseInt(document.getElementById('week-selector').value, 10);
+    const list = document.getElementById('settleList');
+    const msg  = document.getElementById('settleMsg');
+    list.innerHTML = '';
+    msg.textContent = '';
+  
+    try {
+      const res = await fetch(`/api/parlay/week/${encodeURIComponent(leagueId)}/${encodeURIComponent(week)}`, {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+  
+      if (res.status === 403) {
+        list.innerHTML = '<div class="muted">Submit your own parlay for this week to unlock viewing/settling.</div>';
+        return;
+      }
+      const data = await res.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        list.innerHTML = '<div class="muted">No parlays submitted for this week.</div>';
+        return;
+      }
+  
+      data.forEach(p => {
+        const uid = p?.userId?._id || '';
+        const uname = p?.userId?.username || 'User';
+        const totalAm = fmtAmerican(americanFromDecimal(p.odds));
+        const current = p.result || 'pending';
+  
+        const row = document.createElement('div');
+        row.className = 'line-item';
+        row.setAttribute('data-uid', uid);
+        row.innerHTML = `
+          <div style="margin-bottom:6px;"><strong>${uname}</strong> — Total ${totalAm}</div>
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+            <label><input type="radio" name="res-${uid}" value="won" ${current==='won'?'checked':''}> Won</label>
+            <label><input type="radio" name="res-${uid}" value="lost" ${current==='lost'?'checked':''}> Lost</label>
+            <label><input type="radio" name="res-${uid}" value="pending" ${current==='pending'?'checked':''}> Pending</label>
+            <label>Legs Won <input type="number" min="0" id="won-${uid}" style="width:64px" value="${p.legsWon ?? 0}"></label>
+            <label>Legs Lost <input type="number" min="0" id="lost-${uid}" style="width:64px" value="${p.legsLost ?? 0}"></label>
+          </div>
+        `;
+        list.appendChild(row);
+      });
+    } catch (e) {
+      console.error(e);
+      list.innerHTML = '<div class="muted">Error loading parlays for settlement.</div>';
+    }
+  }
+  
+  // --- Save all rows (calls /api/parlay/settle per member)
+  async function saveSettlements() {
+    const token = localStorage.getItem('token');
+    const week = parseInt(document.getElementById('week-selector').value, 10);
+    const msg  = document.getElementById('settleMsg');
+  
+    const rows = [...document.querySelectorAll('#settleList .line-item[data-uid]')];
+    if (!rows.length) { msg.textContent = 'Nothing to save.'; return; }
+  
+    let ok = 0, fail = 0;
+    for (const row of rows) {
+      const uid = row.getAttribute('data-uid');
+      const result = (document.querySelector(`input[name="res-${uid}"]:checked`)?.value) || 'pending';
+      const legsWon  = Number(document.getElementById(`won-${uid}`)?.value || 0);
+      const legsLost = Number(document.getElementById(`lost-${uid}`)?.value || 0);
+  
+      try {
+        const r = await fetch('/api/parlay/settle', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ leagueId, targetUserId: uid, week, result, legsWon, legsLost })
+        });
+        if (r.ok) ok++; else fail++;
+      } catch { fail++; }
+    }
+    msg.textContent = `Saved: ${ok} • Failed: ${fail}`;
+  }
+  </script>
+  
 </body>
 </html>
