@@ -245,51 +245,58 @@ paren += ')';
 
     // --- Season stats (PUBLIC: no auth header to avoid JWT logs) ---
     async function loadSeasonStats() {
-      const container = document.getElementById('season-stats');
-      if (!leagueId || !container) return;
+  const token = localStorage.getItem('token');
+  const container = document.getElementById('season-stats');
+  if (!leagueId || !container) return;
 
-      try {
-        const res = await fetch(`/api/league/${leagueId}/stats`);
-        const data = await res.json();
+  // show a quick loading state
+  container.innerHTML = '<p class="center">Loading season stats…</p>';
 
-        if (!Array.isArray(data) || data.length === 0) {
-          container.innerHTML = '<p class="center">No stats yet.</p>';
-          return;
-        }
+  try {
+    const res = await fetch(`/api/league/${leagueId}/stats?ts=${Date.now()}`, {  // 👈 cache-bust
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await res.json();
 
-        const rows = data.map(s =>
-          `<tr>
-            <td>${s.username}</td>
-            <td class="center">${s.legsWon}</td>
-            <td class="center">${s.legsLost}</td>
-            <td class="center">${s.parlayWins}</td>
-            <td class="center">${s.parlayLosses}</td>
-            <td class="center"><strong>${s.points}</strong></td>
-          </tr>`
-        ).join('');
-
-        container.innerHTML = `
-          <h3>Season Stats</h3>
-          <div class="line-item">
-            <table style="width:100%; border-collapse:collapse;">
-              <thead>
-                <tr>
-                  <th style="text-align:left;">Member</th>
-                  <th>Legs Won</th>
-                  <th>Legs Lost</th>
-                  <th>Parlay Wins</th>
-                  <th>Parlay Losses</th>
-                  <th>Points</th>
-                </tr>
-              </thead>
-              <tbody>${rows}</tbody>
-            </table>
-          </div>`;
-      } catch (err) {
-        console.error('Stats load error:', err);
-        container.innerHTML = '<p class="center">Error loading stats.</p>';
-      }
+    if (!Array.isArray(data) || data.length === 0) {
+      container.innerHTML = '<p class="center">No stats yet.</p>';
+      return;
     }
+
+    const rows = data.map(s =>
+      `<tr>
+        <td>${s.username}</td>
+        <td class="center">${s.legsWon}</td>
+        <td class="center">${s.legsLost}</td>
+        <td class="center">${s.parlayWins}</td>
+        <td class="center">${s.parlayLosses}</td>
+        <td class="center"><strong>${s.points}</strong></td>
+      </tr>`
+    ).join('');
+
+    container.innerHTML = `
+      <h3>Season Stats</h3>
+      <div class="line-item">
+        <table style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:left;">Member</th>
+              <th>Legs Won</th>
+              <th>Legs Lost</th>
+              <th>Parlay Wins</th>
+              <th>Parlay Losses</th>
+              <th>Points</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch (err) {
+    console.error('Stats load error:', err);
+    container.innerHTML = '<p class="center">Error loading stats.</p>';
+  }
+}
+
 
     // --- Wire up ---
     document.addEventListener('DOMContentLoaded', () => {
@@ -411,34 +418,41 @@ paren += ')';
   
   // --- Save all rows (calls /api/parlay/settle per member)
   async function saveSettlements() {
-    const token = localStorage.getItem('token');
-    const week = parseInt(document.getElementById('week-selector').value, 10);
-    const msg  = document.getElementById('settleMsg');
-  
-    const rows = [...document.querySelectorAll('#settleList .line-item[data-uid]')];
-    if (!rows.length) { msg.textContent = 'Nothing to save.'; return; }
-  
-    let ok = 0, fail = 0;
-    for (const row of rows) {
-      const uid = row.getAttribute('data-uid');
-      const result = (document.querySelector(`input[name="res-${uid}"]:checked`)?.value) || 'pending';
-      const legsWon  = Number(document.getElementById(`won-${uid}`)?.value || 0);
-      const legsLost = Number(document.getElementById(`lost-${uid}`)?.value || 0);
-  
-      try {
-        const r = await fetch('/api/parlay/settle', {
-          method: 'POST',
-          headers: {
-            'Authorization': 'Bearer ' + token,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ leagueId, targetUserId: uid, week, result, legsWon, legsLost })
-        });
-        if (r.ok) ok++; else fail++;
-      } catch { fail++; }
-    }
-    msg.textContent = `Saved: ${ok} • Failed: ${fail}`;
+  const token = localStorage.getItem('token');
+  const week = parseInt(document.getElementById('week-selector').value, 10);
+  const msg  = document.getElementById('settleMsg');
+
+  const rows = [...document.querySelectorAll('#settleList .line-item[data-uid]')];
+  if (!rows.length) { msg.textContent = 'Nothing to save.'; return; }
+
+  let ok = 0, fail = 0;
+  for (const row of rows) {
+    const uid = row.getAttribute('data-uid');
+    const result = (document.querySelector(`input[name="res-${uid}"]:checked`)?.value) || 'pending';
+    const legsWon  = Number(document.getElementById(`won-${uid}`)?.value || 0);
+    const legsLost = Number(document.getElementById(`lost-${uid}`)?.value || 0);
+
+    try {
+      const r = await fetch('/api/parlay/settle', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ leagueId, targetUserId: uid, week, result, legsWon, legsLost })
+      });
+      if (r.ok) ok++; else fail++;
+    } catch { fail++; }
   }
+
+  // 🔄 Immediately refresh season stats and the week’s list
+  await loadSeasonStats();
+  await buildSettleList();    // keeps the admin panel in sync
+  await loadWeekPicks();      // refreshes the visible weekly picks section
+
+  msg.textContent = `Saved: ${ok} • Failed: ${fail} • Refreshed.`;
+}
+
   </script>
   
 </body>
