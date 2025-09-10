@@ -601,54 +601,92 @@ app.post('/api/parlay/settle', async (req, res) => {
 });
 
 // League season stats (public)
+// League season stats (recompute using current league settings)
 app.get('/api/league/:leagueId/stats', async (req, res) => {
   const { leagueId } = req.params;
   try {
+    // 1) Load league settings (for scoring)
+    const league = await League.findById(leagueId).select('settings');
+    if (!league) return res.status(404).json({ error: 'League not found.' });
+
+    const settings = league.settings || {};
+    const leagueType = settings.leagueType || 'classic';
+
+    // Scoring config (points league can edit these)
+    const pointsPerWin = leagueType === 'points'
+      ? Number(settings.pointsPerWin) || 1
+      : 1; // classic still shows 1 per win in this table
+    const bonusWeek   = leagueType === 'points'
+      ? Number(settings.bonusWeek)   || 0
+      : 0;
+    const bonusSeason = leagueType === 'points'
+      ? Number(settings.bonusSeason) || 0
+      : 0;
+
+    // 2) Load all season parlays for this league
     const parlays = await Parlay.find({ leagueId }).populate('userId', 'username');
 
-    const byUser = new Map(); // userId -> { username, legsWon, legsLost, parlayWins, parlayLosses, points }
+    // 3) Aggregate per user
+    const byUser = new Map(); // userId -> totals row
     const ensure = (uid, uname) => {
-      if (!byUser.has(uid)) byUser.set(uid, { username: uname, legsWon: 0, legsLost: 0, parlayWins: 0, parlayLosses: 0, points: 0 });
+      if (!byUser.has(uid)) byUser.set(uid, {
+        username: uname,
+        legsWon: 0,
+        legsLost: 0,
+        parlayWins: 0,
+        parlayLosses: 0,
+        points: 0
+      });
       return byUser.get(uid);
     };
 
-    // Base counts (1 pt per parlay win)
     for (const p of parlays) {
-      const u = ensure(p.userId._id.toString(), p.userId.username);
-      u.legsWon += p.legsWon || 0;
-      u.legsLost += p.legsLost || 0;
-      if (p.result === 'won') { u.parlayWins += 1; u.points += 1; }
-      if (p.result === 'lost') { u.parlayLosses += 1; }
+      const uid = p.userId?._id?.toString() || '';
+      const uname = p.userId?.username || 'User';
+      const row = ensure(uid, uname);
+
+      row.legsWon  += Number(p.legsWon || 0);
+      row.legsLost += Number(p.legsLost || 0);
+
+      if (p.result === 'won')  { row.parlayWins  += 1; row.points += pointsPerWin; }
+      if (p.result === 'lost') { row.parlayLosses += 1; }
     }
 
-    // Weekly longest winning odds: +2
-    const byWeek = new Map();
-    for (const p of parlays) {
-      if (p.result === 'won') {
-        const list = byWeek.get(p.week) || [];
-        list.push(p);
-        byWeek.set(p.week, list);
+    // 4) Weekly longest winning odds bonus
+    if (bonusWeek > 0) {
+      const byWeek = new Map(); // week -> [winning parlays]
+      for (const p of parlays) {
+        if (p.result === 'won') {
+          const wk = Number(p.week);
+          if (!byWeek.has(wk)) byWeek.set(wk, []);
+          byWeek.get(wk).push(p);
+        }
+      }
+      for (const wins of byWeek.values()) {
+        if (!wins.length) continue;
+        const maxOdds = Math.max(...wins.map(p => Number(p.odds) || 0));
+        wins.filter(p => Number(p.odds) === maxOdds).forEach(p => {
+          const uid = p.userId?._id?.toString();
+          const row = uid && byUser.get(uid);
+          if (row) row.points += bonusWeek;
+        });
       }
     }
-    for (const wins of byWeek.values()) {
-      if (wins.length === 0) continue;
-      const maxOdds = Math.max(...wins.map(p => Number(p.odds) || 0));
-      wins.filter(p => Number(p.odds) === maxOdds).forEach(p => {
-        const u = byUser.get(p.userId._id.toString());
-        if (u) u.points += 2;
-      });
+
+    // 5) Season longest winning odds bonus
+    if (bonusSeason > 0) {
+      const winning = parlays.filter(p => p.result === 'won');
+      if (winning.length) {
+        const seasonMax = Math.max(...winning.map(p => Number(p.odds) || 0));
+        winning.filter(p => Number(p.odds) === seasonMax).forEach(p => {
+          const uid = p.userId?._id?.toString();
+          const row = uid && byUser.get(uid);
+          if (row) row.points += bonusSeason;
+        });
+      }
     }
 
-    // Season longest winning odds: +5
-    const winning = parlays.filter(p => p.result === 'won');
-    if (winning.length > 0) {
-      const seasonMax = Math.max(...winning.map(p => Number(p.odds) || 0));
-      winning.filter(p => Number(p.odds) === seasonMax).forEach(p => {
-        const u = byUser.get(p.userId._id.toString());
-        if (u) u.points += 5;
-      });
-    }
-
+    // 6) Sort by points desc (stable tie-breakers could be added later)
     const out = [...byUser.values()].sort((a, b) => b.points - a.points);
     res.json(out);
   } catch (err) {
@@ -656,6 +694,7 @@ app.get('/api/league/:leagueId/stats', async (req, res) => {
     res.status(500).json({ error: 'Server error computing stats.' });
   }
 });
+
 
 // ===== Start the Server =====
 app.listen(PORT, () => {

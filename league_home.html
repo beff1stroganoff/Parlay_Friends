@@ -218,10 +218,20 @@ function isNum(v){ return v !== '' && v !== null && v !== undefined && Number.is
   const subject = type === 'total' ? 'TOTAL' : (pick.team || '');
 
   // build the parentheses text
-  let paren = '(' + (type === 'total' ? '' : label);
-if (ouTag) paren += (type === 'total' ? ouTag : ' ' + ouTag);
-if (lineTxt) paren += (type === 'total' && ouTag ? ' ' : '') + lineTxt;
-paren += ')';
+let paren;
+if (type === 'spread') {
+  // Show signed spread number, e.g. (SPREAD -2.5) or (SPREAD +3.5)
+  const ln = isNum(pick.line) ? Number(pick.line) : null;
+  const signed = ln == null ? '' : (ln > 0 ? ` +${ln}` : ` ${ln}`);
+  paren = `(${label}${signed})`;
+} else {
+  // Your original logic for totals & props (O/U + line) and others
+  paren = '(' + (type === 'total' ? '' : label);
+  if (ouTag) paren += (type === 'total' ? ouTag : ' ' + ouTag);
+  if (lineTxt) paren += (type === 'total' && ouTag ? ' ' : '') + lineTxt;
+  paren += ')';
+}
+
 
 
   // For TD markets there is no O/U or line — paren already just "(ANYTIME TD)" / "(1ST TD)"
