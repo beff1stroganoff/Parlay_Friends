@@ -360,15 +360,16 @@ function buildWeekSelect(current) {
       );
     }
     // Show these markets if present (exact Odds API keys)
-const PROP_KEY_GROUPS = [
+    const PROP_KEY_GROUPS = [
   ['player_pass_yds'],
+  ['player_pass_tds'],        // NEW
   ['player_reception_yds'],
-  ['player_reception_tds'],
+  ['player_receptions'],      // NEW
   ['player_rush_yds'],
-  ['player_anytime_td'],
-  ['player_1st_td']
+  ['player_anytime_td']
 ];
 const PROP_KEYS_FLAT = Array.from(new Set(PROP_KEY_GROUPS.flat()));
+
 
 
 // --- No same-game parlays helpers ---
@@ -415,14 +416,15 @@ function toggleGameButtons(gameId, disabled) {
     function normalizeLabel(key) {
   const map = {
     player_pass_yds: 'Passing Yards',
+    player_pass_tds: 'Passing TDs',        // NEW
     player_reception_yds: 'Reception Yards',
-    player_reception_tds: 'Reception TDs',
+    player_receptions: 'Receptions',       // NEW
     player_rush_yds: 'Rushing Yards',
-    player_anytime_td: 'Anytime TD Scorer',
-    player_1st_td: 'First TD Scorer'
+    player_anytime_td: 'Anytime TD Scorer'
   };
   return map[key] || prettyKey(key);
 }
+
 
 // Extract player name / side (Over|Under|Yes|No) / line / price robustly
 function parseOutcome(marketKey, oc) {

@@ -361,15 +361,17 @@ app.get('/api/odds', async (req, res) => {
   };
 
   // Props config (official keys)
-  const PROP_KEYS = [
-    'player_pass_yds',
-    'player_reception_tds',
-    'player_reception_yds',
-    'player_rush_yds',
-    'player_1st_td',
-    'player_anytime_td'
-  ];
-  const PROPS_QS = PROP_KEYS.join(',');
+const PROP_KEYS = [
+  'player_pass_yds',
+  'player_pass_tds',        // NEW: Passing TDs (O/U)
+  'player_reception_yds',
+  'player_receptions',      // NEW: Total Receptions (O/U)
+  'player_rush_yds',
+  'player_anytime_td'
+  // 'player_1st_td'        // REMOVED: First TD scorer
+];
+const PROPS_QS = PROP_KEYS.join(',');
+
 
   // Simple in-memory cache (5 minutes)
   const CACHE_TTL_MS = 5 * 60 * 1000;
