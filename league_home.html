@@ -61,6 +61,8 @@
                   
 
     <div id="season-stats" class="mt-4"></div>
+    <div id="season-longest" class="mt-4"></div>
+
   </main>
 
   <footer>
@@ -306,6 +308,36 @@ if (type === 'spread') {
     container.innerHTML = '<p class="center">Error loading stats.</p>';
   }
 }
+
+async function loadSeasonMax() {
+  const box = document.getElementById('season-longest');
+  if (!box) return;
+  box.innerHTML = '<p class="center">Checking season longest…</p>';
+  try {
+    const r = await fetch(`/api/league/${leagueId}/season-max?ts=${Date.now()}`);
+    const data = await r.json();
+    if (!data?.hasWinner) {
+      box.innerHTML = '<div class="line-item">No winning parlays yet this season.</div>';
+      return;
+    }
+    const plus = data.american > 0 ? `+${data.american}` : `${data.american}`;
+    const names = data.winners.map(w => `${w.username} (Wk ${w.week})`).join(', ');
+    box.innerHTML = `
+      <div class="line-item" style="display:flex;justify-content:space-between;align-items:center;">
+        <div><strong>Longest Winning Odds (Season):</strong></div>
+        <div><strong>${plus}</strong> <span class="muted">(${data.decimal.toFixed(2)})</span></div>
+      </div>
+      <div class="muted">Holder(s): ${names}</div>
+    `;
+  } catch {
+    box.innerHTML = '<div class="line-item">Error loading season-longest.</div>';
+  }
+}
+// on load:
+document.addEventListener('DOMContentLoaded', () => {
+  // ...your existing calls...
+  loadSeasonMax();
+});
 
 
     // --- Wire up ---

@@ -697,6 +697,43 @@ app.get('/api/league/:leagueId/stats', async (req, res) => {
   }
 });
 
+// Longest winning odds (season)
+app.get('/api/league/:leagueId/season-max', async (req, res) => {
+  const { leagueId } = req.params;
+  try {
+    const wins = await Parlay.find({ leagueId, result: 'won' })
+      .populate('userId', 'username')
+      .select('userId week odds')
+      .lean();
+
+    if (!wins.length) return res.json({ hasWinner: false });
+
+    const maxOdds = Math.max(...wins.map(w => Number(w.odds) || 0));
+    const winners = wins.filter(w => Number(w.odds) === maxOdds);
+
+    // american odds helper
+    const amFromDec = (d) => {
+      const x = Number(d);
+      if (!isFinite(x) || x <= 1) return -10000;
+      return x >= 2 ? Math.round((x - 1) * 100) : Math.round(-100 / (x - 1));
+    };
+
+    res.json({
+      hasWinner: true,
+      decimal: maxOdds,
+      american: amFromDec(maxOdds),
+      winners: winners.map(w => ({
+        username: w.userId?.username || 'User',
+        week: Number(w.week)
+      }))
+    });
+  } catch (err) {
+    console.error('season-max error', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
 
 // ===== Start the Server =====
 app.listen(PORT, () => {
