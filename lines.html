@@ -385,14 +385,16 @@ function toggleGameButtons(gameId, disabled) {
 
 
 
-    /* ---------- helper to push a leg ---------- */
-    function pushLeg({game, bookTitle, key, label, side, who, line, priceDecimal}) {
+ /* ---------- helper to push a leg ---------- */
+function pushLeg({ game, bookTitle, key, label, side, who, line, priceDecimal, matchup }) {
   if (!game?.id) { showError('Missing game id for selection.'); return; }
   if (gameHasLeg(game.id)) {
     alert('Only one leg per game is allowed. Remove the existing leg first.');
     return;
   }
+
   const am = toAmerican(priceDecimal);
+  const builtMatchup = matchup || game.title || '';
   slip.push({
     gameId: game.id,
     market: key,
@@ -402,14 +404,15 @@ function toggleGameButtons(gameId, disabled) {
     line: (line !== '' && line !== undefined) ? Number(line) : undefined,
     priceDecimal,
     oddsAmerican: am,
-    book: bookTitle
+    book: bookTitle,
+    matchup: builtMatchup || null
   });
+
   // Lock this game's buttons
   toggleGameButtons(game.id, true);
   renderSlip();
   renderValidation();
 }
-
 
 
     // Drop in smarter parsing for Over/Under vs. Yes/No
@@ -461,8 +464,10 @@ function parseOutcome(marketKey, oc) {
 
 
       const home = game?.home_team || 'Home';
-      const away = game?.away_team || 'Away';
-      const commence = game?.commence_time ? new Date(game.commence_time).toLocaleString() : 'TBD';
+const away = game?.away_team || 'Away';
+const commence = game?.commence_time ? new Date(game.commence_time).toLocaleString() : 'TBD';
+const matchup = `${away} @ ${home}`;   // <-- add this
+
 
       div.innerHTML = `
         <div class="row">
@@ -556,7 +561,7 @@ function parseOutcome(marketKey, oc) {
           btn.addEventListener('click', () => {
             pushLeg({
               game, bookTitle: book.title, key: 'total', label: 'Total',
-              side: label, who: label, line, priceDecimal: price
+              side: label, who: label, line, priceDecimal: price, matchup
             });
           });
           tot.appendChild(btn);
@@ -782,7 +787,8 @@ if (!res.ok) {
   type: l.market,             // e.g. 'total', 'player_pass_yds'
   side: l.side ?? null,       // 'Over' | 'Under' | 'Yes' | etc.
   line: (l.line !== undefined && l.line !== null) ? Number(l.line) : null, // numeric line/yds
-  odds: l.oddsAmerican        // keep as American in picks
+  odds: l.oddsAmerican,        // keep as American in picks
+  matchup: l.matchup || null  // <-- carry game (e.g., "ATL @ GB")
 }));
 
 

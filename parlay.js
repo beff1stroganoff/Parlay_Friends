@@ -7,7 +7,9 @@ const PickSchema = new mongoose.Schema(
     type: { type: String },                     // 'total', 'player_pass_yds', etc.
     side: { type: String, default: null },      // 'Over' | 'Under' | 'Yes' | 'No' | null
     line: { type: Number, default: null },      // points/yds if applicable
-    odds: { type: Number },                     // American odds per leg (as you store in picks)
+    odds: { type: Number }, 
+    matchup: {type: String},                    // American odds per leg (as you store in picks)
+    result: { type: String, enum: ['pending','won','lost','push'], default: 'pending' }
   },
   { _id: false }
 );
