@@ -546,28 +546,36 @@ const matchup = `${away} @ ${home}`;   // <-- add this
         marketsEl.appendChild(sp);
       }
 
-      // Totals
-      if (mIndex.totals && Array.isArray(mIndex.totals.outcomes)) {
-        const tot = document.createElement('div');
-        tot.innerHTML = `<div style="margin:6px 0"><strong>${book.title}</strong> • Total</div>`;
-        mIndex.totals.outcomes.forEach(oc => {
-          const price = Number(oc.price);
-          const line = oc.point;
-          const label = oc.name?.toUpperCase() || 'TOTAL';
-          const btn = document.createElement('button');
-          btn.className = 'btn';
-          btn.type = 'button';
-          btn.textContent = `${label} ${line} ${fmtAmerican(toAmerican(price))}`;
-          btn.addEventListener('click', () => {
-            pushLeg({
-              game, bookTitle: book.title, key: 'total', label: 'Total',
-              side: label, who: label, line, priceDecimal: price, matchup
-            });
-          });
-          tot.appendChild(btn);
-        });
-        marketsEl.appendChild(tot);
-      }
+      /// Totals
+if (mIndex.totals && Array.isArray(mIndex.totals.outcomes)) {
+  const tot = document.createElement('div');
+  tot.innerHTML = `<div style="margin:6px 0"><strong>${book.title}</strong> • Total</div>`;
+  mIndex.totals.outcomes.forEach(oc => {
+    const price = Number(oc.price);
+    const line = oc.point;
+    const ou = (oc.name?.toUpperCase() || 'TOTAL'); // "OVER" / "UNDER"
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.type = 'button';
+    btn.textContent = `${ou} ${line} ${fmtAmerican(toAmerican(price))}`;
+    btn.addEventListener('click', () => {
+      pushLeg({
+        game,
+        bookTitle: book.title,
+        key: 'total',
+        label: 'Total',
+        side: ou,                // keep O/U in side
+        who: matchup,            // 👈 store the matchup as the "team"
+        line,
+        priceDecimal: price,
+        matchup                  // 👈 also pass explicit matchup field
+      });
+    });
+    tot.appendChild(btn);
+  });
+  marketsEl.appendChild(tot);
+}
+
 
      /* --- Player Props (multi-market) --- */
 const presentPropKeys = [];

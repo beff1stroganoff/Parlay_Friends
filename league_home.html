@@ -228,12 +228,10 @@ function isNum(v){ return v !== '' && v !== null && v !== undefined && Number.is
   const t = String(type || pick.type || '').toLowerCase();
   const isTotal = t === 'total' || t.includes('total')
   const subject =
-  isTotal
-    ? (pick.matchup || pick.game || pick.gameName || '')  // try all possible sources
-        .replace('@', 'v')
-        .replace(/\s+/g, ' ')
-        .trim()
+  type === 'total'
+    ? (pick.matchup || pick.team || 'TOTAL')  // 👈 now shows the game
     : (pick.team || '');
+
 
 
   // build the parentheses text
